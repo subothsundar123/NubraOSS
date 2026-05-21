@@ -5,7 +5,7 @@ import logging
 import queue
 import threading
 import time as _time
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime, time, timedelta
 from itertools import islice
 from pathlib import Path
@@ -41,6 +41,9 @@ from app.schemas import (
     VolumeBreakoutSummary,
     VolumeBreakoutSyncStatus,
 )
+from app.services.positioning.engines.market_structure_engine import MarketStructureEngine
+from app.services.positioning.engines.opening_range_engine import OpeningRangeEngine
+from app.services.positioning.engines.vwap_engine import VwapEngine
 from app.services.instrument_service import instrument_service
 from app.services.market_history_service import HistoricalFetchRequest, market_history_service
 
@@ -146,6 +149,12 @@ class VolumeBreakoutService:
         self._liquidity_warmups: set[str] = set()
         self._liquidity_warmups_lock = threading.Lock()
         self._last_cached_snapshot: VolumeBreakoutStatusResponse | None = None
+        self._retained_consumers: set[str] = set()
+        self._hydration_state = "cold"
+        self._idle_reason: str | None = "scanner runtime has not been started"
+        # Stateless engines reused across every scan cycle — created once, never mutate.
+        self._vwap_engine = VwapEngine()
+        self._structure_engine = MarketStructureEngine()
 
     def _current_ist(self) -> datetime:
         return datetime.now(IST)
@@ -212,6 +221,49 @@ class VolumeBreakoutService:
         snapshot.is_cached_snapshot = True
         snapshot.summary.market_status = "cached"
         return snapshot if self._snapshot_has_rows(snapshot) else None
+
+    def _with_lifecycle(
+        self,
+        snapshot: VolumeBreakoutStatusResponse,
+        *,
+        hydration_state: str | None = None,
+        restored_from_snapshot: bool | None = None,
+        idle_reason: str | None | object = "__current__",
+    ) -> VolumeBreakoutStatusResponse:
+        snapshot.hydration_state = hydration_state or self._hydration_state
+        snapshot.event_subscribers = self.event_subscriber_count()
+        snapshot.retained_consumers = self.retained_consumer_count()
+        snapshot.active_consumers = snapshot.event_subscribers + snapshot.retained_consumers
+        if restored_from_snapshot is not None:
+            snapshot.restored_from_snapshot = restored_from_snapshot
+        if idle_reason == "__current__":
+            snapshot.idle_reason = self._idle_reason
+        else:
+            snapshot.idle_reason = idle_reason  # type: ignore[assignment]
+        return snapshot
+
+    def _recover_persisted_snapshot(self, request: VolumeBreakoutStartRequest | None = None) -> VolumeBreakoutStatusResponse | None:
+        candidate_request = request or self.default_positioning_request()
+        cached = (
+            self._last_cached_snapshot
+            if self._snapshot_matches_request(self._last_cached_snapshot, candidate_request)
+            else None
+        )
+        if cached is None:
+            cached = self._load_persisted_snapshot(candidate_request)
+        if cached is None:
+            return None
+        snapshot = cached.model_copy(deep=True)
+        snapshot.running = False
+        snapshot.is_cached_snapshot = True
+        snapshot.restored_from_snapshot = True
+        snapshot.summary.market_status = "stale" if self._runtime is None else snapshot.summary.market_status
+        return self._with_lifecycle(
+            snapshot,
+            hydration_state="restoring_snapshot" if self._runtime is None else self._hydration_state,
+            restored_from_snapshot=True,
+            idle_reason=self._idle_reason,
+        )
 
     def _persist_snapshot(self, runtime: VolumeBreakoutRuntime, *, is_cached: bool = False) -> None:
         snapshot = self._snapshot_from(runtime, is_cached=is_cached)
@@ -342,6 +394,53 @@ class VolumeBreakoutService:
     def has_event_subscribers(self) -> bool:
         with self._event_queues_lock:
             return bool(self._event_queues)
+
+    def event_subscriber_count(self) -> int:
+        with self._event_queues_lock:
+            return len(self._event_queues)
+
+    def retain_consumer(self, consumer_id: str) -> None:
+        with self._lock:
+            self._retained_consumers.add(consumer_id)
+            if self._idle_reason == "no active scanner consumers":
+                self._idle_reason = None
+
+    def release_consumer(self, consumer_id: str) -> None:
+        with self._lock:
+            self._retained_consumers.discard(consumer_id)
+
+    def retained_consumer_count(self) -> int:
+        with self._lock:
+            return len(self._retained_consumers)
+
+    def has_active_consumers(self) -> bool:
+        return self.event_subscriber_count() > 0 or self.retained_consumer_count() > 0
+
+    def maybe_stop_if_unowned(self) -> VolumeBreakoutStatusResponse | None:
+        if self.has_active_consumers():
+            return None
+        return self.stop(reason="no active scanner consumers")
+
+    def default_positioning_request(
+        self,
+        *,
+        session_token: str = "positioning-persisted-token",
+        device_id: str = "positioning-system",
+        environment: str = "PROD",
+    ) -> VolumeBreakoutStartRequest:
+        return VolumeBreakoutStartRequest(
+            session_token=session_token,
+            device_id=device_id,
+            environment=environment,  # type: ignore[arg-type]
+            universe_mode="all_nse",
+            interval="5m",
+            lookback_days=10,
+            refresh_seconds=30,
+            min_volume_ratio=1.5,
+            limit=50,
+            universe_limit=300,
+            universe_slug="volume-dashboard-all-nse",
+        )
 
     def _push_event(self, event: dict[str, Any]) -> None:
         with self._event_queues_lock:
@@ -1064,6 +1163,25 @@ class VolumeBreakoutService:
         )
         is_price_breakout = bool(pd.notna(lookback_high) and current_close > lookback_high)
 
+        # Compute session VWAP and market structure for this symbol.
+        # Filter to the current session date only so VWAP resets each day.
+        above_vwap: bool | None = None
+        vwap_relation: str | None = None
+        structure_phase: str | None = None
+        try:
+            session_frame = working[working["session_date"] == current_ts.date()]
+            if not session_frame.empty:
+                enriched = self._vwap_engine.apply_session_vwap(session_frame)
+                vwap_state = self._vwap_engine.state(enriched)
+                if vwap_state.relation != "unavailable":
+                    vwap_relation = vwap_state.relation
+                    above_vwap = vwap_state.relation in ("accepted_above", "testing_above")
+                structure_state = self._structure_engine.compute(enriched)
+                if structure_state.phase != "insufficient":
+                    structure_phase = structure_state.phase
+        except Exception:
+            pass  # Non-fatal — positioning engines treat None as unavailable
+
         return VolumeBreakoutStockRow(
             symbol=str(meta["symbol"]),
             display_name=str(meta.get("display_name") or meta["symbol"]),
@@ -1082,6 +1200,9 @@ class VolumeBreakoutService:
             is_price_breakout=is_price_breakout,
             meets_breakout=volume_ratio >= request.min_volume_ratio,
             baseline_days=baseline_days,
+            above_vwap=above_vwap,
+            vwap_relation=vwap_relation,
+            structure_phase=structure_phase,
         )
 
     def _latest_candle_label(self, frames: list[pd.DataFrame], interval: str) -> str | None:
@@ -1545,17 +1666,27 @@ class VolumeBreakoutService:
                     return
 
             try:
+                self._hydration_state = "syncing_history"
                 self._sync_and_scan(runtime)
+                self._hydration_state = "partially_ready" if runtime.sync.symbols_missing_history else "live"
                 self._push_event({"type": "scan_update", "payload": self._scan_payload(runtime)})
             except Exception as exc:
                 runtime.last_error = str(exc)
                 runtime.summary.market_status = "error"
+                self._hydration_state = "degraded"
 
             if self._stop_event.wait(runtime.request.refresh_seconds):
                 return
 
     def _snapshot_from(self, runtime: VolumeBreakoutRuntime, is_cached: bool = False) -> VolumeBreakoutStatusResponse:
-        return VolumeBreakoutStatusResponse(
+        # Build the full scanned universe list — every symbol that completed this scan
+        # cycle, sorted by descending volume_ratio. This is what positioning engines use
+        # for unbiased breadth/participation/internals calculations.
+        all_scanned = sorted(
+            runtime.partial_scan_rows.values(),
+            key=lambda r: (-r.volume_ratio, r.symbol),
+        )
+        snapshot = VolumeBreakoutStatusResponse(
             running=runtime.running,
             universe_slug=runtime.request.universe_slug,
             universe_mode=runtime.request.universe_mode,
@@ -1576,17 +1707,22 @@ class VolumeBreakoutService:
             movers_up=list(runtime.movers_up),
             movers_down=list(runtime.movers_down),
             sector_heatmap_rows=self._sector_heatmap_rows(runtime),
+            all_scanned_rows=all_scanned,
             is_cached_snapshot=is_cached,
         )
+        return self._with_lifecycle(snapshot)
 
     def _snapshot(self) -> VolumeBreakoutStatusResponse:
         runtime = self._runtime
         if runtime is None:
-            return VolumeBreakoutStatusResponse(
+            recovered = self._recover_persisted_snapshot()
+            if recovered is not None:
+                return recovered
+            snapshot = VolumeBreakoutStatusResponse(
                 running=False,
-                universe_slug="volume-dashboard-liquidity-top300",
-                universe_mode="top300",
-                universe_label=self._universe_label("top300"),
+                universe_slug="volume-dashboard-all-nse",
+                universe_mode="all_nse",
+                universe_label=self._universe_label("all_nse"),
                 interval="5m",
                 lookback_days=10,
                 refresh_seconds=30,
@@ -1620,6 +1756,7 @@ class VolumeBreakoutService:
                 movers_down=[],
                 is_cached_snapshot=False,
             )
+            return self._with_lifecycle(snapshot, hydration_state="cold", idle_reason=self._idle_reason)
         return self._snapshot_from(runtime)
 
     def _get_last_cached_snapshot(self) -> VolumeBreakoutStatusResponse | None:
@@ -1671,6 +1808,12 @@ class VolumeBreakoutService:
             "universe_size": runtime.universe_size,
             "is_cached_snapshot": is_cached,
             "is_partial_scan": is_partial,
+            "hydration_state": self._hydration_state,
+            "active_consumers": self.event_subscriber_count() + self.retained_consumer_count(),
+            "retained_consumers": self.retained_consumer_count(),
+            "event_subscribers": self.event_subscriber_count(),
+            "restored_from_snapshot": is_cached,
+            "idle_reason": self._idle_reason,
         }
 
     def start(self, payload: VolumeBreakoutStartRequest) -> VolumeBreakoutStatusResponse:
@@ -1688,6 +1831,8 @@ class VolumeBreakoutService:
         with self._lock:
             self._runtime = runtime
             self._stop_event = threading.Event()
+            self._hydration_state = "hydrating"
+            self._idle_reason = None
 
         cached_snapshot = (
             self._last_cached_snapshot
@@ -1700,6 +1845,11 @@ class VolumeBreakoutService:
         if early_return:
             early_return.is_cached_snapshot = True
             early_return.summary.market_status = "updating" if self.has_event_subscribers() else "bootstrapping"
+            self._with_lifecycle(
+                early_return,
+                hydration_state="restoring_snapshot" if cached_snapshot else "hydrating",
+                restored_from_snapshot=bool(cached_snapshot),
+            )
 
         def _start_gap_fill_thread() -> None:
             gap_fill = threading.Thread(
@@ -1712,11 +1862,13 @@ class VolumeBreakoutService:
 
         def _async_initialize() -> None:
             try:
+                self._hydration_state = "hydrating"
                 runtime.universe_rows = self._ensure_universe(runtime)
                 runtime.universe_size = len(runtime.universe_rows)
             except Exception as exc:
                 runtime.last_error = str(exc)
                 runtime.summary.market_status = "error"
+                self._hydration_state = "degraded"
                 logger.exception("volume_dashboard.start.universe_failed error=%s", exc)
                 self._push_event({"type": "scan_ready", "payload": self._snapshot_from(runtime, is_cached=False).model_dump()})
                 return
@@ -1724,6 +1876,7 @@ class VolumeBreakoutService:
             if not runtime.universe_rows:
                 runtime.last_error = "Unable to build a stock universe from Nubra refdata for the volume dashboard."
                 runtime.summary.market_status = "error"
+                self._hydration_state = "degraded"
                 logger.warning("volume_dashboard.start.universe_empty")
                 self._push_event({"type": "scan_ready", "payload": self._snapshot_from(runtime, is_cached=False).model_dump()})
                 return
@@ -1740,6 +1893,7 @@ class VolumeBreakoutService:
             if runtime.sync.db_enabled:
                 with connect_db() as connection:
                     runtime.symbol_latest_timestamps = load_latest_ohlcv_1m_bars(connection, universe_slug=runtime.request.universe_slug)
+                self._hydration_state = "restoring_snapshot" if cached_snapshot else "hydrating"
                 runtime.base_frames = self._load_base_frames_from_db(
                     runtime,
                     target_rows=bootstrap_rows or None,
@@ -1752,7 +1906,9 @@ class VolumeBreakoutService:
                 )
                 if runtime.base_frames:
                     try:
+                        self._hydration_state = "scanning"
                         self._run_scan(runtime)
+                        self._hydration_state = "partially_ready" if runtime.sync.symbols_missing_history else "live"
                         runtime.last_snapshot_ist = self._current_ist().strftime("%Y-%m-%d %H:%M:%S %Z")
                         self._push_event({"type": "scan_update", "payload": self._scan_payload(runtime, is_cached=True, is_partial=True)})
                     except Exception as exc:
@@ -1787,16 +1943,21 @@ class VolumeBreakoutService:
                     })
                 try:
                     with self._sync_lock:
+                        self._hydration_state = "syncing_history"
                         self._sync_history(runtime, target_rows=bootstrap_rows, on_batch_complete=on_bootstrap_batch_complete)
                 except Exception as exc:
                     runtime.last_error = str(exc)
+                    self._hydration_state = "degraded"
                     logger.exception("volume_dashboard.start.bootstrap_sync_failed error=%s", exc)
             if runtime.base_frames:
                 try:
+                    self._hydration_state = "scanning"
                     self._run_scan(runtime)
+                    self._hydration_state = "partially_ready" if runtime.sync.symbols_missing_history else "live"
                     runtime.last_snapshot_ist = self._current_ist().strftime("%Y-%m-%d %H:%M:%S %Z")
                 except Exception as exc:
                     runtime.last_error = str(exc)
+                    self._hydration_state = "degraded"
                     logger.exception("volume_dashboard.start.scan_failed error=%s", exc)
 
             self._push_event({"type": "scan_ready", "payload": self._snapshot_from(runtime, is_cached=False).model_dump()})
@@ -1937,24 +2098,38 @@ class VolumeBreakoutService:
         runtime.universe_rows = self._ensure_universe(runtime)
         runtime.universe_size = len(runtime.universe_rows)
         meta = next((row for row in runtime.universe_rows if str(row.get("symbol") or "").strip().upper() == symbol), None)
+        # If symbol is not in the configured universe but was surfaced by the scanner
+        # (e.g. a breakout candidate outside the liquidity-ranked top-N), attempt the
+        # drilldown anyway using a minimal metadata stub so the UI can show candles.
         if meta is None:
-            raise HTTPException(status_code=404, detail=f"{symbol} is not part of the current volume dashboard universe.")
+            meta = {"symbol": symbol, "display_name": symbol, "exchange": "NSE", "sector": None}
+            # Expand the universe temporarily to include this symbol so _hydrate_db_cache_state fetches its history.
+            runtime.universe_rows = list(runtime.universe_rows) + [meta]
+            runtime.universe_size = len(runtime.universe_rows)
 
         if runtime.sync.db_enabled:
             self._hydrate_db_cache_state(runtime, end_ist=sync_end_ist)
 
         frame = runtime.base_frames.get(symbol)
         if frame is None or frame.empty:
-            raise HTTPException(status_code=404, detail=f"No cached history available for {symbol}.")
+            raise HTTPException(status_code=404, detail=f"No candle history available for {symbol}. It may be newly listed or outside the tracked universe.")
 
-        working = self._drop_incomplete_candle(self._prepare_frame(frame, runtime.request.interval), runtime.request.interval)
+        prepared = self._prepare_frame(frame, runtime.request.interval)
+        working = self._drop_incomplete_candle(prepared, runtime.request.interval)
         if working.empty:
             raise HTTPException(status_code=404, detail=f"No completed candles available for {symbol}.")
 
-        visible = working.tail(payload.points)
+        vwap_engine = VwapEngine()
+        opening_range_engine = OpeningRangeEngine()
+        structure_engine = MarketStructureEngine()
+        enriched = vwap_engine.apply_session_vwap(working)
+        visible = enriched.tail(payload.points)
         latest_ts = working.index[-1]
         baseline = self._baseline_volumes(working, latest_ts, runtime.request.lookback_days)
         baseline_average_volume = float(baseline.mean()) if not baseline.empty else None
+        vwap_state = vwap_engine.state(enriched)
+        opening_ranges = opening_range_engine.compute_all(enriched)
+        structure_state = structure_engine.compute(enriched)
 
         return VolumeBreakoutDrilldownResponse(
             symbol=symbol,
@@ -1964,28 +2139,53 @@ class VolumeBreakoutService:
             interval=runtime.request.interval,
             latest_candle_ist=latest_ts.strftime("%Y-%m-%d %H:%M:%S %Z"),
             baseline_average_volume=round(baseline_average_volume, 2) if baseline_average_volume is not None else None,
+            vwap=asdict(vwap_state),
+            opening_ranges=opening_ranges,
+            structure=asdict(structure_state),
             points=[
                 VolumeBreakoutDrilldownPoint(
-                    time_ist=index.strftime("%H:%M"),
+                    time_ist=index.strftime("%Y-%m-%d %H:%M:%S %Z"),
+                    epoch_ms=int(index.timestamp() * 1000),
+                    open=round(float(row["open"]), 2),
+                    high=round(float(row["high"]), 2),
+                    low=round(float(row["low"]), 2),
                     close=round(float(row["close"]), 2),
                     volume=round(float(row["bucket_volume"]) if pd.notna(row["bucket_volume"]) else 0.0, 2),
+                    session_vwap=(
+                        round(float(row["session_vwap"]), 2)
+                        if "session_vwap" in row and pd.notna(row["session_vwap"])
+                        else None
+                    ),
+                    is_partial=False,
                 )
                 for index, row in visible.iterrows()
             ],
         )
 
-    def stop(self) -> VolumeBreakoutStatusResponse:
+    def ensure_system_runtime(self, request: VolumeBreakoutStartRequest, *, consumer_id: str) -> VolumeBreakoutStatusResponse:
+        self.retain_consumer(consumer_id)
+        with self._lock:
+            runtime = self._runtime
+        if runtime and runtime.running:
+            current = self._snapshot_from(runtime)
+            if self._snapshot_matches_request(current, request):
+                return current
+        return self.start(request)
+
+    def stop(self, *, reason: str = "manual stop") -> VolumeBreakoutStatusResponse:
         self._stop_event.set()
         thread = self._thread
         if thread and thread.is_alive():
             thread.join(timeout=2.0)
         self._thread = None
+        snapshot = self._snapshot()
         with self._lock:
             if self._runtime:
                 self._runtime.running = False
-            snapshot = self._snapshot()
             self._last_cached_snapshot = snapshot
             self._runtime = None
+            self._hydration_state = "stale" if self._snapshot_has_rows(snapshot) else "cold"
+            self._idle_reason = reason
         return snapshot
 
     def status(self) -> VolumeBreakoutStatusResponse:

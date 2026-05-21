@@ -1,4 +1,5 @@
 import asyncio
+from datetime import datetime, timedelta, timezone
 from typing import Any
 import queue as _queue
 
@@ -54,6 +55,9 @@ from app.schemas import (
     TradingViewWebhookResetResponse,
     TradingViewWebhookStatusResponse,
     TunnelStatusResponse,
+    PositioningCandlesRequest,
+    PositioningCandlesResponse,
+    VolumeBreakoutDrilldownPoint,
     VolumeBreakoutDrilldownRequest,
     VolumeBreakoutDrilldownResponse,
     VolumeBreakoutStartRequest,
@@ -67,8 +71,11 @@ from app.schemas import (
     VerifyTotpRequest,
     VerifyTotpResponse,
 )
+from app.db import connect_db, load_intraday_candles_for_symbol
 from app.services.auth_service import auth_service
 from app.services.instrument_service import instrument_service
+from app.services.positioning.event_bus import positioning_event_bus
+from app.services.positioning.orchestrator import positioning_orchestrator
 from app.services.scalper_live_service import ScalperLiveSession
 from app.services.scalper_service import scalper_service
 from app.services.scalper_volume_breakout_service import scalper_volume_breakout_service
@@ -96,6 +103,16 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.on_event("startup")
+def start_positioning_orchestrator() -> None:
+    positioning_orchestrator.start()
+
+
+@app.on_event("shutdown")
+def stop_positioning_orchestrator() -> None:
+    positioning_orchestrator.stop()
 
 
 @app.get("/health")
@@ -484,10 +501,121 @@ def get_volume_breakout_drilldown(payload: VolumeBreakoutDrilldownRequest) -> Vo
     return volume_breakout_service.drilldown(payload)
 
 
+_IST = timezone(timedelta(hours=5, minutes=30))
+
+
+@app.post("/api/positioning/candles", response_model=PositioningCandlesResponse)
+def get_positioning_candles(payload: PositioningCandlesRequest) -> PositioningCandlesResponse:
+    session_start_ist = datetime.now(tz=_IST).replace(hour=9, minute=0, second=0, microsecond=0)
+    since_utc = session_start_ist.astimezone(timezone.utc)
+    conn = connect_db()
+    try:
+        rows = load_intraday_candles_for_symbol(
+            conn,
+            symbol=payload.symbol,
+            exchange=payload.exchange,
+            since_timestamp=since_utc,
+        )
+    finally:
+        conn.close()
+    points: list[VolumeBreakoutDrilldownPoint] = []
+    for row in rows:
+        ts_raw: str = row.get("bucket_timestamp", "")
+        try:
+            dt = datetime.fromisoformat(ts_raw.replace("Z", "+00:00"))
+            epoch_ms: int | None = int(dt.timestamp() * 1000)
+            time_ist = dt.astimezone(_IST).strftime("%Y-%m-%dT%H:%M:%S+05:30")
+        except Exception:
+            epoch_ms = None
+            time_ist = ts_raw
+        points.append(
+            VolumeBreakoutDrilldownPoint(
+                time_ist=time_ist,
+                epoch_ms=epoch_ms,
+                open=row.get("open_price"),
+                high=row.get("high_price"),
+                low=row.get("low_price"),
+                close=float(row.get("close_price") or 0),
+                volume=float(row.get("bucket_volume") or 0),
+            )
+        )
+    return PositioningCandlesResponse(
+        symbol=payload.symbol.strip().upper(),
+        exchange=payload.exchange.strip().upper(),
+        points=points,
+    )
+
+
 @app.get("/api/system/market-status", response_model=MarketStatusResponse)
 def get_market_status() -> MarketStatusResponse:
     info = volume_breakout_service.market_status_info()
     return MarketStatusResponse(**info)
+
+
+@app.get("/api/positioning/status")
+def get_positioning_status() -> dict[str, Any]:
+    return positioning_orchestrator.status()
+
+
+@app.get("/api/positioning/snapshot")
+def get_positioning_snapshot() -> dict[str, Any]:
+    return positioning_orchestrator.snapshot().model_dump()
+
+
+@app.websocket("/ws/positioning")
+async def positioning_ws(websocket: WebSocket) -> None:
+    """
+    Central Phase 1 positioning stream.
+
+    Protocol:
+      1. Client connects and sends a small init JSON payload.
+      2. Server replies with {"type": "snapshot", "payload": <full positioning snapshot>}.
+      3. Server streams updated snapshots from the orchestrator every refresh cycle.
+      4. Server sends {"type": "heartbeat"} when idle.
+    """
+    await websocket.accept()
+    try:
+        raw = await asyncio.wait_for(websocket.receive_json(), timeout=20.0)
+        if not isinstance(raw, dict):
+            raise ValueError("Init payload must be an object.")
+    except asyncio.TimeoutError:
+        await websocket.close(code=1008, reason="Timeout waiting for init params.")
+        return
+    except WebSocketDisconnect:
+        return
+    except Exception as exc:
+        try:
+            await websocket.send_json({"type": "error", "message": f"Invalid init params: {exc}"})
+        finally:
+            await websocket.close(code=1008)
+        return
+
+    event_queue = positioning_event_bus.subscribe()
+    try:
+        bootstrap = positioning_orchestrator.bootstrap_scanner(raw)
+        snapshot = positioning_orchestrator.snapshot()
+        await websocket.send_json(
+            {
+                "type": "snapshot",
+                "seq": snapshot.seq,
+                "payload": snapshot.model_dump(),
+                "scanner_bootstrap": bootstrap,
+            }
+        )
+        loop = asyncio.get_running_loop()
+        while True:
+            try:
+                event = await asyncio.wait_for(
+                    loop.run_in_executor(None, lambda: event_queue.get(timeout=30)),
+                    timeout=35.0,
+                )
+                await websocket.send_json(event.model_dump())
+            except asyncio.TimeoutError:
+                await websocket.send_json({"type": "heartbeat", "seq": positioning_orchestrator.snapshot().seq})
+    except WebSocketDisconnect:
+        pass
+    finally:
+        positioning_event_bus.unsubscribe(event_queue)
 
 
 @app.websocket("/ws/volume-breakout")
@@ -552,8 +680,7 @@ async def volume_breakout_ws(websocket: WebSocket) -> None:
         pass
     finally:
         volume_breakout_service.unregister_event_queue(event_queue)
-        if not volume_breakout_service.has_event_subscribers():
-            volume_breakout_service.stop()
+        volume_breakout_service.maybe_stop_if_unowned()
 
 
 @app.websocket("/ws/volume-quotes")

@@ -738,6 +738,10 @@ class VolumeBreakoutStockRow(BaseModel):
     is_price_breakout: bool
     meets_breakout: bool
     baseline_days: int
+    # Structure intelligence — populated by scanner for positioning engines
+    above_vwap: bool | None = None
+    vwap_relation: str | None = None   # accepted_above|testing_above|testing_below|accepted_below|unavailable
+    structure_phase: str | None = None  # momentum_continuation|compression|structure_break|range_rotation|grinding_higher|grinding_lower|insufficient
 
 
 class VolumeBreakoutSummary(BaseModel):
@@ -781,13 +785,28 @@ class VolumeBreakoutStatusResponse(BaseModel):
     movers_up: list[VolumeBreakoutStockRow]
     movers_down: list[VolumeBreakoutStockRow]
     sector_heatmap_rows: list[VolumeBreakoutStockRow] = Field(default_factory=list)
+    # Full scanned universe — every symbol that passed the scan this cycle (no breakout filter).
+    # Used by positioning engines to compute unbiased breadth and participation metrics.
+    all_scanned_rows: list[VolumeBreakoutStockRow] = Field(default_factory=list)
     is_cached_snapshot: bool = False
+    hydration_state: str = "cold"
+    active_consumers: int = 0
+    retained_consumers: int = 0
+    event_subscribers: int = 0
+    restored_from_snapshot: bool = False
+    idle_reason: str | None = None
 
 
 class VolumeBreakoutDrilldownPoint(BaseModel):
     time_ist: str
+    epoch_ms: int | None = None
+    open: float | None = None
+    high: float | None = None
+    low: float | None = None
     close: float
     volume: float
+    session_vwap: float | None = None
+    is_partial: bool = False
 
 
 class VolumeBreakoutDrilldownRequest(VolumeBreakoutStartRequest):
@@ -803,6 +822,24 @@ class VolumeBreakoutDrilldownResponse(BaseModel):
     interval: Interval
     latest_candle_ist: str | None
     baseline_average_volume: float | None
+    vwap: dict[str, Any] = Field(default_factory=dict)
+    opening_ranges: dict[str, Any] = Field(default_factory=dict)
+    structure: dict[str, Any] = Field(default_factory=dict)
+    points: list[VolumeBreakoutDrilldownPoint]
+
+
+class PositioningCandlesRequest(BaseModel):
+    session_token: str = Field(min_length=10)
+    device_id: str = Field(min_length=3, max_length=128)
+    environment: Environment
+    symbol: str = Field(min_length=1, max_length=64)
+    exchange: str = Field(default="NSE", min_length=1, max_length=16)
+
+
+class PositioningCandlesResponse(BaseModel):
+    symbol: str
+    exchange: str
+    interval: str = "1m"
     points: list[VolumeBreakoutDrilldownPoint]
 
 

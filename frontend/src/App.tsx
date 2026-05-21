@@ -3,6 +3,7 @@ import nubraLogo from './assets/nubra.png'
 import AutomatePanel from './components/AutomatePanel'
 import IndicatorBuilder from './components/IndicatorBuilder'
 import PostLoginFooter from './components/PostLoginFooter'
+import PositioningDashboard from './components/positioning/PositioningDashboard'
 import ScalperLiveChart from './components/ScalperLiveChart'
 import StrategyBuilder from './components/StrategyBuilder'
 import VolumeDashboard from './components/VolumeDashboard'
@@ -17,7 +18,7 @@ type Environment = 'PROD' | 'UAT'
 type AuthMethod = 'otp' | 'totp'
 type Step = 'start' | 'otp' | 'totp' | 'mpin' | 'success'
 type SignedOutView = 'landing' | 'login'
-type View = SignedOutView | 'dashboard' | 'no-code' | 'backtest-lab' | 'volume-breakout' | 'tradingview-webhook' | 'scalper' | 'execution-auth'
+type View = SignedOutView | 'dashboard' | 'positioning' | 'no-code' | 'backtest-lab' | 'volume-breakout' | 'tradingview-webhook' | 'scalper' | 'execution-auth'
 type TradingViewMode = 'strategy' | 'line'
 type TradingViewAction = 'BUY' | 'SELL'
 type Interval = '1m' | '2m' | '3m' | '5m' | '15m' | '30m' | '1h'
@@ -1019,13 +1020,14 @@ export default function App() {
           </div>
           <span className="topbar-sep" />
           <nav className="topbar-nav" aria-label="Primary navigation">
-            {['Dashboard','Scanner','Webhook','Scalper'].map((tab) => (
+            {['Dashboard','Positioning','Scanner','Webhook','Scalper'].map((tab) => (
               <button
                 key={tab}
                 type="button"
                 className={tab === pageLabel ? 'nav-item active' : 'nav-item'}
                 onClick={() => {
                   if (tab === 'Dashboard') setView('dashboard')
+                  else if (tab === 'Positioning') setView('positioning')
                   else if (tab === 'Scanner') setView('volume-breakout')
                   else if (tab === 'Webhook') setView('tradingview-webhook')
                   else if (tab === 'Scalper') setView('scalper')
@@ -2325,7 +2327,7 @@ export default function App() {
     )
   }
 
-  function handleDashboardCardOpen(nextView: Extract<View, 'no-code' | 'backtest-lab' | 'volume-breakout' | 'tradingview-webhook' | 'scalper'>) {
+  function handleDashboardCardOpen(nextView: Extract<View, 'positioning' | 'no-code' | 'backtest-lab' | 'volume-breakout' | 'tradingview-webhook' | 'scalper'>) {
     setView(nextView)
   }
 
@@ -2602,6 +2604,17 @@ export default function App() {
           onBack={() => setView('dashboard')}
         renderNav={(activeTab: string) => renderDashboardNav(activeTab)}
         mode="backtest"
+      />
+    )
+  }
+
+  if (view === 'positioning') {
+    return (
+      <PositioningDashboard
+        session={session!}
+        onBack={() => setView('dashboard')}
+        onOpenScalper={() => setView('scalper')}
+        renderNav={(activeTab: string) => renderDashboardNav(activeTab)}
       />
     )
   }
@@ -3456,6 +3469,7 @@ export default function App() {
   if (view === 'dashboard') {
     const moduleCards = [
       { key: 'no-code' as const,            title: 'No Code',            sub: 'Visual strategy authoring',    accent: 'rgb(124,207,94)',  glow: '124,207,94',  icon: 'backtest' },
+      { key: 'positioning' as const,        title: 'Positioning OS',     sub: 'Realtime market intelligence', accent: 'rgb(120,201,255)', glow: '120,201,255', icon: 'positioning' },
       { key: 'volume-breakout' as const,     title: 'Volume Breakout',    sub: 'Market-wide breakout scanner', accent: 'rgb(120,201,255)', glow: '120,201,255', icon: 'platform' },
       { key: 'tradingview-webhook' as const, title: 'Webhook Strategies', sub: 'Signal-driven automation',     accent: 'rgb(177,102,16)',  glow: '177,102,16',  icon: 'webhook'  },
       { key: 'scalper' as const,             title: 'Scalper',            sub: 'Intraday live charts',          accent: 'rgb(149,220,122)', glow: '149,220,122', icon: 'chain'    },
@@ -3464,6 +3478,7 @@ export default function App() {
     ]
     const iconPaths: Record<string, React.ReactNode> = {
       backtest: <><path d="M3 17l4-6 4 3 6-9"/><path d="M3 21h18"/></>,
+      positioning: <><path d="M4 18V6"/><path d="M8 18V9"/><path d="M12 18V4"/><path d="M16 18v-7"/><path d="M20 18V8"/><path d="M3 18h18"/></>,
       platform: <><rect x={3} y={4} width={18} height={13} rx={1.5}/><path d="M3 14h18M8 20h8M12 17v3"/></>,
       webhook:  <><circle cx={7} cy={7} r={2.5}/><circle cx={17} cy={17} r={2.5}/><circle cx={17} cy={7} r={2.5}/><path d="M9 8.5L15 15.5M15 7h-6"/></>,
       book:     <><path d="M4 5v15a1 1 0 001 1h15V6a2 2 0 00-2-2H6a2 2 0 00-2 1z"/><path d="M8 9h8M8 13h8M8 17h5"/></>,

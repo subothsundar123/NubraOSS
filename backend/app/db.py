@@ -134,6 +134,52 @@ create table if not exists volume_dashboard_snapshots (
 
 create index if not exists idx_volume_dashboard_snapshots_created
     on volume_dashboard_snapshots(created_at desc);
+
+create table if not exists positioning_snapshots (
+    id integer primary key autoincrement,
+    universe text not null,
+    created_at text not null,
+    seq integer not null,
+    status text not null,
+    payload_json text not null
+);
+
+create index if not exists idx_positioning_snapshots_universe_created
+    on positioning_snapshots(universe, created_at desc);
+
+create table if not exists positioning_latest_snapshots (
+    universe text primary key,
+    updated_at text not null,
+    seq integer not null,
+    status text not null,
+    payload_json text not null
+);
+
+create table if not exists positioning_alert_history (
+    id text primary key,
+    created_at text not null,
+    severity text not null,
+    source text not null,
+    title text not null,
+    message text not null,
+    payload_json text not null default '{}'
+);
+
+create index if not exists idx_positioning_alert_history_created
+    on positioning_alert_history(created_at desc);
+
+create table if not exists positioning_option_pressure_snapshots (
+    id text primary key,
+    created_at text not null,
+    seq integer not null,
+    underlying text not null,
+    call_pressure real not null,
+    put_pressure real not null,
+    payload_json text not null
+);
+
+create index if not exists idx_positioning_option_pressure_created
+    on positioning_option_pressure_snapshots(created_at desc, underlying);
 """
 
 
@@ -697,6 +743,36 @@ def _ensure_utc(value: datetime) -> datetime:
     if value.tzinfo is None:
         return value.replace(tzinfo=UTC)
     return value.astimezone(UTC)
+
+
+def load_intraday_candles_for_symbol(
+    connection: sqlite3.Connection,
+    *,
+    symbol: str,
+    exchange: str,
+    since_timestamp: datetime,
+) -> list[dict[str, Any]]:
+    cursor = connection.execute(
+        """
+        select
+            symbol,
+            exchange,
+            bucket_timestamp,
+            open_price,
+            high_price,
+            low_price,
+            close_price,
+            bucket_volume,
+            cumulative_volume
+        from ohlcv_1m_bars
+        where symbol = ?
+          and exchange = ?
+          and bucket_timestamp >= ?
+        order by bucket_timestamp asc
+        """,
+        [symbol.strip().upper(), exchange.strip().upper(), _ensure_utc(since_timestamp).isoformat()],
+    )
+    return _fetch_all_dicts(cursor)
 
 
 def prune_ohlcv_1m_bars(
