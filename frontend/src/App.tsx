@@ -746,6 +746,9 @@ function formatCompactNumber(value: number | null | undefined): string {
 export default function App() {
   const [view, setView] = useState<View>(() => (loadStoredSession() ? 'dashboard' : 'landing'))
   const [step, setStep] = useState<Step>(() => (loadStoredSession() ? 'success' : 'start'))
+  const [disclaimerAccepted, setDisclaimerAccepted] = useState<boolean>(() =>
+    localStorage.getItem('nubraoss_disclaimer_accepted') === '1'
+  )
   const environment: Environment = DATA_ENVIRONMENT
   const [authMethod, setAuthMethod] = useState<AuthMethod>('otp')
   const [phone, setPhone] = useState('')
@@ -2926,22 +2929,37 @@ export default function App() {
   }
 
   if (view === 'range-trader') {
-    if (!session) {
-      setView('dashboard')
-      return null
-    }
-    const rangeTraderExecutionSession = rangeTraderExecutionEnvironment === 'PROD'
-      ? session
-      : executionSessions[rangeTraderExecutionEnvironment]
+    if (!session) { setView('dashboard'); return null }
     return (
-      <RangeTrader
-        session={rangeTraderExecutionSession ?? session}
-        executionEnvironment={rangeTraderExecutionEnvironment}
-        onExecutionEnvironmentChange={handleRangeTraderExecutionEnvironmentSelect}
-        onAuthRequired={handleRangeTraderAuthRequired}
-        onBack={() => setView('dashboard')}
-        renderNav={(activeTab: string) => renderDashboardNav(activeTab)}
-      />
+      <div className="dash">
+        {renderDashboardNav('Range Trader')}
+        <div style={{
+          display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+          flex: 1, minHeight: 420, gap: 16, padding: 32, textAlign: 'center',
+        }}>
+          <div style={{ fontSize: 36 }}>🚧</div>
+          <div style={{ fontSize: 17, fontWeight: 700, color: 'var(--fg)' }}>Range Trader — Under Development</div>
+          <div style={{
+            fontSize: 13, color: 'var(--fg-faint)', maxWidth: 420, lineHeight: 1.7,
+          }}>
+            This module is actively being built. You can explore the interface for ideation and strategy planning, but live order execution is not available yet.
+          </div>
+          <div style={{
+            marginTop: 4, padding: '10px 18px',
+            background: 'rgba(251,191,36,0.08)', border: '1px solid rgba(251,191,36,0.3)',
+            borderRadius: 7, fontSize: 12, color: 'rgb(251,191,36)', maxWidth: 400,
+          }}>
+            Expected to be production-ready in an upcoming release. Watch the repo for updates.
+          </div>
+          <button
+            className="primary-btn"
+            style={{ marginTop: 8, width: 'auto', padding: '8px 24px' }}
+            onClick={() => setView('dashboard')}
+          >
+            Back to Dashboard
+          </button>
+        </div>
+      </div>
     )
   }
 
@@ -3775,7 +3793,50 @@ export default function App() {
           ) : null}
 
           <div className="form-body">
-            {step === 'start' && (
+            {step === 'start' && !isExecutionAuthScreen && !disclaimerAccepted && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                <div style={{
+                  background: 'rgba(251,191,36,0.07)', border: '1px solid rgba(251,191,36,0.3)',
+                  borderRadius: 8, padding: '14px 16px',
+                  fontSize: 12, color: 'var(--fg-faint)', lineHeight: 1.75,
+                }}>
+                  <div style={{ fontWeight: 700, fontSize: 13, color: 'rgb(251,191,36)', marginBottom: 8 }}>
+                    ⚠️ Educational Use Disclaimer
+                  </div>
+                  <p style={{ margin: '0 0 8px' }}>
+                    <strong style={{ color: 'var(--fg)' }}>NubraOSS is provided solely for educational and research purposes.</strong> All
+                    signals, analytics, OI data, Greeks, and position suggestions displayed on this platform are informational
+                    only and do not constitute investment advice, financial advice, or a recommendation to buy or sell any
+                    security or financial instrument.
+                  </p>
+                  <p style={{ margin: '0 0 8px' }}>
+                    Trading in options and derivatives involves substantial risk of loss and is not suitable for all investors.
+                    Past performance of any signal or strategy does not guarantee future results.
+                  </p>
+                  <p style={{ margin: '0 0 8px' }}>
+                    <strong style={{ color: 'var(--fg)' }}>The repository holder, contributors, and Nubra are not responsible or liable</strong> for
+                    any trading losses, financial damages, or other consequences arising from the use of this software or any
+                    action taken based on information displayed herein.
+                  </p>
+                  <p style={{ margin: 0 }}>
+                    By proceeding, you confirm that you are using this platform for educational purposes only, and that all
+                    trading decisions are made entirely at your own risk.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  className="primary-btn"
+                  style={{ width: '100%' }}
+                  onClick={() => {
+                    localStorage.setItem('nubraoss_disclaimer_accepted', '1')
+                    setDisclaimerAccepted(true)
+                  }}
+                >
+                  I Understand & Agree — Continue
+                </button>
+              </div>
+            )}
+            {step === 'start' && (isExecutionAuthScreen || disclaimerAccepted) && (
               <form onSubmit={handleStart}>
                 <div className="field-group-v2">
                   <div className="seg-control" role="tablist" aria-label="Authentication method" style={{ marginBottom: 18 }}>

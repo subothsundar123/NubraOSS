@@ -63,6 +63,30 @@
   animation: ptp-pulse 1.5s ease-in-out infinite;
 }
 
+.oie-tab-wrap { position: relative; }
+
+.oie-tab-locked {
+  opacity: 0.45;
+  cursor: default !important;
+  pointer-events: auto;
+}
+.oie-tab-locked:hover { color: var(--fg-faint) !important; }
+
+.oie-tab-soon {
+  display: inline-block;
+  margin-left: 5px;
+  padding: 1px 5px;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  background: rgba(148,163,184,0.12);
+  border: 1px solid rgba(148,163,184,0.25);
+  border-radius: 3px;
+  color: rgb(148,163,184);
+  vertical-align: middle;
+}
+
 /* Content area */
 .oie-content {
   flex: 1;

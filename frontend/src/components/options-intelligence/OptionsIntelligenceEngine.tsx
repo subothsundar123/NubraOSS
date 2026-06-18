@@ -44,9 +44,14 @@ interface Props {
   environment: string
 }
 
+const COMING_SOON_TABS = new Set<OIETab>(['alerts', 'automation', 'strategy'])
+const UNLOCK_CLICKS = 5
+
 export default function OptionsIntelligenceEngine({ sessionToken, deviceId, environment }: Props) {
   const [activeTab, setActiveTab] = useState<OIETab>('intelligence')
   const [trackRequest, setTrackRequest] = useState<TrackRequest | null>(null)
+  const [unlockedTabs, setUnlockedTabs] = useState<Set<OIETab>>(new Set())
+  const secretClickCounts = useRef<Partial<Record<OIETab, number>>>({})
 
   const {
     intelligence, chain, signalReport,
@@ -181,19 +186,35 @@ export default function OptionsIntelligenceEngine({ sessionToken, deviceId, envi
           const isPositions = t.key === 'positions'
           const posCount = livePositions.length
           const alertCount = livePositions.filter(p => p.urgency === 'high').length
+          const isLocked = COMING_SOON_TABS.has(t.key) && !unlockedTabs.has(t.key)
           return (
-            <button
-              key={t.key}
-              className={`oie-tab${activeTab === t.key ? ' active' : ''}`}
-              onClick={() => setActiveTab(t.key)}
-            >
-              {t.label}
-              {isPositions && posCount > 0 && (
-                <span className={`oie-tab-badge${alertCount > 0 ? ' alert' : ''}`}>
-                  {posCount}
-                </span>
-              )}
-            </button>
+            <div key={t.key} className="oie-tab-wrap" title={isLocked ? 'Coming soon' : undefined}>
+              <button
+                className={`oie-tab${activeTab === t.key ? ' active' : ''}${isLocked ? ' oie-tab-locked' : ''}`}
+                onClick={() => {
+                  if (isLocked) {
+                    const count = (secretClickCounts.current[t.key] ?? 0) + 1
+                    secretClickCounts.current[t.key] = count
+                    if (count >= UNLOCK_CLICKS) {
+                      setUnlockedTabs(prev => new Set([...prev, t.key]))
+                      setActiveTab(t.key)
+                    }
+                    return
+                  }
+                  setActiveTab(t.key)
+                }}
+              >
+                {t.label}
+                {isLocked && (
+                  <span className="oie-tab-soon">soon</span>
+                )}
+                {isPositions && posCount > 0 && (
+                  <span className={`oie-tab-badge${alertCount > 0 ? ' alert' : ''}`}>
+                    {posCount}
+                  </span>
+                )}
+              </button>
+            </div>
           )
         })}
       </div>
