@@ -28,6 +28,7 @@ class HistoricalFetchRequest:
     interval: str = "1m"
     start_dt: datetime | None = None
     end_dt: datetime | None = None
+    intra_day: bool = True
 
 
 class MarketHistoryService:
@@ -72,7 +73,7 @@ class MarketHistoryService:
                     "startDate": request.start_dt.astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%S.000Z"),
                     "endDate": request.end_dt.astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%S.000Z"),
                     "interval": request.interval,
-                    "intraDay": True,
+                    "intraDay": request.intra_day,
                     "realTime": False,
                 }
             ]

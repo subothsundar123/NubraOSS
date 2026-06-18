@@ -1,0 +1,395 @@
+/* ── Education Page ──────────────────────────────────────────────── */
+
+.edu-root {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-mono, 'JetBrains Mono', 'Fira Code', monospace);
+  overflow: hidden;
+}
+
+/* Header */
+.edu-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 20px;
+  background: var(--bg-2);
+  border-bottom: 1px solid var(--hairline);
+  flex-shrink: 0;
+}
+
+.edu-close {
+  background: transparent;
+  border: 1px solid var(--hairline);
+  color: var(--fg-faint);
+  padding: 5px 12px;
+  border-radius: 5px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all .15s;
+}
+.edu-close:hover {
+  background: var(--bg-3, rgba(255,255,255,0.05));
+  color: var(--fg);
+}
+
+/* Layout */
+.edu-layout {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+
+/* Sidebar */
+.edu-sidebar {
+  width: 240px;
+  flex-shrink: 0;
+  background: var(--bg-2);
+  border-right: 1px solid var(--hairline);
+  overflow-y: auto;
+  padding: 8px 0;
+}
+
+.edu-nav-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 9px 14px;
+  background: transparent;
+  border: none;
+  color: var(--fg-faint);
+  font-size: 12px;
+  cursor: pointer;
+  text-align: left;
+  transition: all .15s;
+  border-left: 3px solid transparent;
+}
+.edu-nav-item:hover {
+  background: rgba(255,255,255,0.04);
+  color: var(--fg);
+}
+.edu-nav-item.active {
+  background: rgba(96,165,250,0.08);
+  border-left-color: var(--accent, #60a5fa);
+  color: var(--fg);
+}
+.edu-nav-num {
+  font-size: 10px;
+  color: var(--fg-faint);
+  width: 16px;
+  text-align: right;
+  flex-shrink: 0;
+}
+.edu-nav-emoji {
+  flex-shrink: 0;
+  font-size: 13px;
+}
+.edu-nav-label {
+  line-height: 1.35;
+}
+
+/* Main content */
+.edu-main {
+  flex: 1;
+  overflow-y: auto;
+  padding: 24px 32px 40px;
+  max-width: 900px;
+}
+
+.edu-section-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 20px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--hairline);
+}
+
+.edu-section-title {
+  font-size: 18px;
+  font-weight: 700;
+  margin: 0;
+  color: var(--fg);
+}
+
+/* Body text */
+.edu-body {
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--fg);
+}
+.edu-body h3 {
+  font-size: 13px;
+  font-weight: 700;
+  margin: 20px 0 8px;
+  color: var(--fg);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.edu-body p {
+  margin: 0 0 12px;
+}
+.edu-body ul {
+  margin: 8px 0 12px;
+}
+.edu-body strong {
+  color: var(--fg);
+}
+
+/* Formula */
+.edu-formula {
+  background: rgba(96,165,250,0.06);
+  border: 1px solid rgba(96,165,250,0.2);
+  border-left: 3px solid var(--accent, #60a5fa);
+  border-radius: 0 5px 5px 0;
+  padding: 8px 14px;
+  margin: 10px 0;
+}
+.edu-formula code {
+  font-size: 13px;
+  color: rgb(147,197,253);
+  font-family: inherit;
+  letter-spacing: 0.02em;
+}
+
+/* Two-column layout */
+.edu-two-col {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin: 12px 0;
+}
+
+/* Cards */
+.edu-card {
+  background: rgba(255,255,255,0.03);
+  border: 1px solid var(--hairline);
+  border-radius: 7px;
+  padding: 12px 14px;
+  font-size: 12px;
+  line-height: 1.6;
+}
+.edu-card-title {
+  font-weight: 700;
+  font-size: 12px;
+  margin-bottom: 6px;
+}
+.edu-card-sub {
+  margin-top: 6px;
+  font-size: 11px;
+  color: var(--fg-faint);
+}
+.edu-card-green {
+  border-color: rgba(34,197,94,0.3);
+  background: rgba(34,197,94,0.04);
+}
+.edu-card-green .edu-card-title { color: rgb(34,197,94); }
+.edu-card-red {
+  border-color: rgba(239,68,68,0.3);
+  background: rgba(239,68,68,0.04);
+}
+.edu-card-red .edu-card-title { color: rgb(239,68,68); }
+
+/* Four-grid */
+.edu-four-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin: 12px 0;
+}
+
+/* OI tag cards */
+.edu-tag-card {
+  background: rgba(255,255,255,0.03);
+  border: 1px solid var(--hairline);
+  border-radius: 7px;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.edu-tag-name {
+  font-weight: 700;
+  font-size: 12px;
+  margin-top: 2px;
+}
+.edu-tag-desc {
+  font-size: 11px;
+  color: var(--fg-faint);
+  line-height: 1.55;
+}
+
+/* Table */
+.edu-table-wrap {
+  overflow-x: auto;
+  margin: 12px 0;
+}
+.edu-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+.edu-table th {
+  background: rgba(255,255,255,0.05);
+  padding: 8px 10px;
+  text-align: left;
+  font-weight: 700;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--fg-faint);
+  border-bottom: 1px solid var(--hairline);
+}
+.edu-table td {
+  padding: 8px 10px;
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+  color: var(--fg);
+  line-height: 1.55;
+}
+.edu-table tr:last-child td { border-bottom: none; }
+.edu-table tr:hover td { background: rgba(255,255,255,0.02); }
+
+/* Greek blocks */
+.edu-greek-block {
+  background: rgba(255,255,255,0.02);
+  border: 1px solid var(--hairline);
+  border-radius: 8px;
+  padding: 16px;
+  margin: 14px 0;
+}
+.edu-greek-header {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.edu-greek-symbol {
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--accent, #60a5fa);
+  line-height: 1;
+}
+.edu-greek-name {
+  font-size: 16px;
+  font-weight: 700;
+}
+.edu-greek-tagline {
+  font-size: 12px;
+  color: var(--fg-faint);
+}
+
+/* Platform reference badge */
+.edu-platform-ref {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  background: rgba(96,165,250,0.05);
+  border: 1px solid rgba(96,165,250,0.15);
+  border-radius: 5px;
+  font-size: 11px;
+  color: var(--fg-faint);
+  margin: 10px 0;
+}
+.edu-platform-badge {
+  display: inline-block;
+  padding: 2px 7px;
+  border-radius: 4px;
+  background: rgba(96,165,250,0.15);
+  border: 1px solid rgba(96,165,250,0.3);
+  color: rgb(147,197,253);
+  font-weight: 700;
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  flex-shrink: 0;
+}
+
+/* Pipeline */
+.edu-pipeline {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 12px 0;
+}
+.edu-pipeline-step {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 10px 12px;
+  background: rgba(255,255,255,0.02);
+  border: 1px solid var(--hairline);
+  border-radius: 6px;
+}
+.edu-pipeline-num {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: rgba(96,165,250,0.15);
+  border: 1px solid rgba(96,165,250,0.3);
+  color: rgb(147,197,253);
+  font-weight: 700;
+  font-size: 11px;
+  flex-shrink: 0;
+}
+
+/* Footer */
+.edu-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 20px;
+  background: var(--bg-2);
+  border-top: 1px solid var(--hairline);
+  flex-shrink: 0;
+}
+
+/* Button overrides for education page */
+.edu-root .btn-ghost {
+  background: transparent;
+  border: 1px solid var(--hairline);
+  color: var(--fg-faint);
+  padding: 6px 16px;
+  border-radius: 5px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all .15s;
+}
+.edu-root .btn-ghost:hover:not(:disabled) {
+  background: rgba(255,255,255,0.05);
+  color: var(--fg);
+}
+.edu-root .btn-ghost:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+.edu-root .btn-primary {
+  background: var(--accent, #60a5fa);
+  border: 1px solid var(--accent, #60a5fa);
+  color: #000;
+  padding: 6px 20px;
+  border-radius: 5px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: opacity .15s;
+}
+.edu-root .btn-primary:hover { opacity: 0.85; }
+
+/* Responsive: collapse sidebar on small screens */
+@media (max-width: 700px) {
+  .edu-sidebar { width: 180px; }
+  .edu-main { padding: 16px 18px 32px; }
+  .edu-two-col { grid-template-columns: 1fr; }
+  .edu-four-grid { grid-template-columns: 1fr 1fr; }
+}
+@media (max-width: 520px) {
+  .edu-sidebar { display: none; }
+  .edu-four-grid { grid-template-columns: 1fr; }
+}

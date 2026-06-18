@@ -84,3 +84,51 @@ create table if not exists sync_runs (
     row_count integer not null default 0,
     details_json jsonb not null default '{}'::jsonb
 );
+
+create table if not exists range_trader_setups (
+    id text primary key,
+    account_id text not null,
+    environment text not null,
+    title text not null,
+    symbol text not null,
+    display_name text not null,
+    exchange text not null,
+    instrument_type text not null,
+    derivative_type text,
+    option_type text,
+    expiry text,
+    strike_price double precision,
+    ref_id bigint not null,
+    tick_size integer not null,
+    lot_size integer not null,
+    timeframe text not null,
+    side text not null,
+    quantity integer not null,
+    order_type text not null,
+    tolerance_value double precision not null default 0.05,
+    tolerance_mode text not null default 'percent',
+    max_loss double precision,
+    exit_on_max_loss boolean not null default true,
+    status text not null default 'draft',
+    payload_json jsonb not null default '{}'::jsonb,
+    created_at timestamptz not null default timezone('utc', now()),
+    updated_at timestamptz not null default timezone('utc', now())
+);
+
+create index if not exists idx_range_trader_setups_account_updated
+    on range_trader_setups(account_id, environment, updated_at desc);
+
+create table if not exists range_trader_events (
+    id text primary key,
+    setup_id text not null references range_trader_setups(id) on delete cascade,
+    account_id text not null,
+    environment text not null,
+    created_at timestamptz not null default timezone('utc', now()),
+    level text not null,
+    event_type text not null,
+    message text not null,
+    payload_json jsonb not null default '{}'::jsonb
+);
+
+create index if not exists idx_range_trader_events_setup_created
+    on range_trader_events(setup_id, created_at desc);

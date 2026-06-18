@@ -3,11 +3,14 @@ from __future__ import annotations
 import json
 import sqlite3
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable
 
 from app.config import get_sqlite_db_path
+
+
+UTC = timezone.utc
 
 
 @dataclass(frozen=True, slots=True)
@@ -180,6 +183,194 @@ create table if not exists positioning_option_pressure_snapshots (
 
 create index if not exists idx_positioning_option_pressure_created
     on positioning_option_pressure_snapshots(created_at desc, underlying);
+
+create table if not exists range_trader_setups (
+    id text primary key,
+    account_id text not null,
+    environment text not null,
+    title text not null,
+    symbol text not null,
+    display_name text not null,
+    exchange text not null,
+    instrument_type text not null,
+    derivative_type text,
+    option_type text,
+    expiry text,
+    strike_price real,
+    ref_id integer not null,
+    tick_size integer not null,
+    lot_size integer not null,
+    timeframe text not null,
+    side text not null,
+    quantity integer not null,
+    order_type text not null,
+    tolerance_value real not null,
+    tolerance_mode text not null,
+    max_loss real,
+    exit_on_max_loss integer not null default 1,
+    status text not null,
+    created_at text not null,
+    updated_at text not null,
+    payload_json text not null default '{}'
+);
+
+create index if not exists idx_range_trader_setups_account_updated
+    on range_trader_setups(account_id, environment, updated_at desc);
+
+create table if not exists range_trader_events (
+    id text primary key,
+    setup_id text not null,
+    account_id text not null,
+    environment text not null,
+    created_at text not null,
+    level text not null,
+    event_type text not null,
+    message text not null,
+    payload_json text not null default '{}'
+);
+
+create index if not exists idx_range_trader_events_setup_created
+    on range_trader_events(setup_id, created_at desc);
+
+-- Options Intelligence Engine tables
+create table if not exists oie_chain_snapshots (
+    id integer primary key autoincrement,
+    underlying text not null,
+    expiry text,
+    environment text not null,
+    created_at text not null,
+    spot_price real,
+    total_gex real,
+    gamma_flip real,
+    gamma_flip_level integer,
+    pcr real,
+    max_pain real,
+    gex_bias text,
+    payload_json text not null default '{}'
+);
+
+create index if not exists idx_oie_chain_snapshots_underlying_created
+    on oie_chain_snapshots(underlying, created_at desc);
+
+create index if not exists idx_oie_chain_snapshots_env_created
+    on oie_chain_snapshots(underlying, environment, created_at desc);
+
+create table if not exists oie_strategies (
+    id text primary key,
+    name text not null,
+    underlying text not null default 'NIFTY',
+    description text,
+    entry_conditions_json text not null default '[]',
+    exit_conditions_json text not null default '[]',
+    action text not null default 'alert',
+    is_active integer not null default 1,
+    created_at text not null,
+    updated_at text not null
+);
+
+create table if not exists oie_alerts (
+    id text primary key,
+    strategy_id text,
+    underlying text not null,
+    environment text not null default 'PROD',
+    created_at text not null,
+    severity text not null default 'info',
+    title text not null,
+    message text not null,
+    match_score real,
+    matched_count integer,
+    total_count integer,
+    payload_json text not null default '{}'
+);
+
+create index if not exists idx_oie_alerts_created
+    on oie_alerts(created_at desc);
+
+create index if not exists idx_oie_alerts_strategy
+    on oie_alerts(strategy_id, created_at desc);
+
+create index if not exists idx_oie_alerts_underlying_env
+    on oie_alerts(underlying, environment, created_at desc);
+
+create table if not exists oie_iv_history (
+    id integer primary key autoincrement,
+    underlying text not null,
+    expiry text,
+    environment text not null,
+    recorded_at text not null,
+    atm_iv real,
+    atm_strike integer,
+    iv_percentile real,
+    iv_rank real,
+    payload_json text not null default '{}'
+);
+
+create index if not exists idx_oie_iv_history_underlying_recorded
+    on oie_iv_history(underlying, recorded_at desc);
+
+create index if not exists idx_oie_iv_history_env_recorded
+    on oie_iv_history(underlying, environment, recorded_at desc);
+
+create unique index if not exists idx_oie_iv_history_unique
+    on oie_iv_history(underlying, environment, expiry, recorded_at);
+
+create table if not exists oie_signal_snapshots (
+    id text primary key,
+    underlying text not null,
+    environment text not null,
+    generated_at text not null,
+    composite_direction text not null,
+    composite_score real not null,
+    bull_score real not null default 0,
+    bear_score real not null default 0,
+    summary text not null default '',
+    signals_json text not null default '[]'
+);
+
+create index if not exists idx_oie_signal_snapshots_underlying
+    on oie_signal_snapshots(underlying, generated_at desc);
+
+create table if not exists oie_risk_profiles (
+    id text primary key,
+    underlying text not null,
+    environment text not null,
+    updated_at text not null,
+    max_loss_per_trade real not null default 5000,
+    max_daily_loss real not null default 15000,
+    position_size_lots integer not null default 1,
+    stop_loss_pct real not null default 25,
+    target_pct real not null default 50,
+    time_stop_minutes integer not null default 60,
+    circuit_breaker_enabled integer not null default 1,
+    circuit_breaker_max_losses integer not null default 3,
+    circuit_breaker_daily_floor real not null default -15000,
+    automation_enabled integer not null default 0
+);
+
+create table if not exists oie_execution_log (
+    id text primary key,
+    underlying text not null,
+    environment text not null,
+    executed_at text not null,
+    signal_direction text,
+    strike_price real,
+    option_type text,
+    order_side text,
+    lots integer,
+    order_qty integer,
+    ltp_price real,
+    limit_price real,
+    estimated_value real,
+    order_id integer,
+    order_status text,
+    instrument_display_name text,
+    status text not null default 'pending',
+    error_message text,
+    payload_json text not null default '{}'
+);
+
+create index if not exists idx_oie_execution_log_underlying_executed
+    on oie_execution_log(underlying, executed_at desc);
 """
 
 
@@ -190,6 +381,10 @@ def connect_db() -> sqlite3.Connection:
     connection.row_factory = sqlite3.Row
     initialize_schema(connection)
     return connection
+
+
+# Alias used by OIE engines
+get_db_connection = connect_db
 
 
 def initialize_schema(connection: sqlite3.Connection) -> None:
@@ -794,3 +989,214 @@ def prune_ohlcv_1m_bars(
     )
     connection.commit()
     return cursor.rowcount
+
+
+def upsert_range_trader_setup(connection: sqlite3.Connection, setup: dict[str, Any]) -> dict[str, Any]:
+    now = _utc_now_iso()
+    payload_json = _serialize_json(setup.get("payload") or {})
+    prepared = {
+        **setup,
+        "created_at": setup.get("created_at") or now,
+        "updated_at": now,
+        "payload_json": payload_json,
+        "exit_on_max_loss": 1 if setup.get("exit_on_max_loss", True) else 0,
+    }
+    connection.execute(
+        """
+        insert into range_trader_setups (
+            id, account_id, environment, title, symbol, display_name, exchange,
+            instrument_type, derivative_type, option_type, expiry, strike_price,
+            ref_id, tick_size, lot_size, timeframe, side, quantity, order_type,
+            tolerance_value, tolerance_mode, max_loss, exit_on_max_loss, status,
+            created_at, updated_at, payload_json
+        )
+        values (
+            :id, :account_id, :environment, :title, :symbol, :display_name, :exchange,
+            :instrument_type, :derivative_type, :option_type, :expiry, :strike_price,
+            :ref_id, :tick_size, :lot_size, :timeframe, :side, :quantity, :order_type,
+            :tolerance_value, :tolerance_mode, :max_loss, :exit_on_max_loss, :status,
+            :created_at, :updated_at, :payload_json
+        )
+        on conflict(id) do update set
+            title = excluded.title,
+            symbol = excluded.symbol,
+            display_name = excluded.display_name,
+            exchange = excluded.exchange,
+            instrument_type = excluded.instrument_type,
+            derivative_type = excluded.derivative_type,
+            option_type = excluded.option_type,
+            expiry = excluded.expiry,
+            strike_price = excluded.strike_price,
+            ref_id = excluded.ref_id,
+            tick_size = excluded.tick_size,
+            lot_size = excluded.lot_size,
+            timeframe = excluded.timeframe,
+            side = excluded.side,
+            quantity = excluded.quantity,
+            order_type = excluded.order_type,
+            tolerance_value = excluded.tolerance_value,
+            tolerance_mode = excluded.tolerance_mode,
+            max_loss = excluded.max_loss,
+            exit_on_max_loss = excluded.exit_on_max_loss,
+            status = excluded.status,
+            updated_at = excluded.updated_at,
+            payload_json = excluded.payload_json
+        """,
+        prepared,
+    )
+    connection.commit()
+    return load_range_trader_setup(connection, setup_id=str(setup["id"])) or setup
+
+
+def load_range_trader_setup(connection: sqlite3.Connection, *, setup_id: str) -> dict[str, Any] | None:
+    cursor = connection.execute(
+        """
+        select *
+        from range_trader_setups
+        where id = ?
+        """,
+        (setup_id,),
+    )
+    row = cursor.fetchone()
+    return _decode_range_setup(dict(row)) if row else None
+
+
+def load_range_trader_setups(
+    connection: sqlite3.Connection,
+    *,
+    account_id: str,
+    environment: str,
+) -> list[dict[str, Any]]:
+    cursor = connection.execute(
+        """
+        select *
+        from range_trader_setups
+        where account_id = ?
+          and environment = ?
+        order by updated_at desc
+        limit 25
+        """,
+        (account_id, environment),
+    )
+    return [_decode_range_setup(dict(row)) for row in cursor.fetchall()]
+
+
+def update_range_trader_setup_status(
+    connection: sqlite3.Connection,
+    *,
+    setup_id: str,
+    account_id: str,
+    environment: str,
+    status: str,
+) -> dict[str, Any] | None:
+    connection.execute(
+        """
+        update range_trader_setups
+        set status = ?, updated_at = ?
+        where id = ?
+          and account_id = ?
+          and environment = ?
+        """,
+        (status, _utc_now_iso(), setup_id, account_id, environment),
+    )
+    connection.commit()
+    return load_range_trader_setup(connection, setup_id=setup_id)
+
+
+def update_range_trader_setup_payload(
+    connection: sqlite3.Connection,
+    *,
+    setup_id: str,
+    account_id: str,
+    environment: str,
+    payload: dict[str, Any],
+    status: str | None = None,
+) -> dict[str, Any] | None:
+    updated_at = _utc_now_iso()
+    if status is None:
+        connection.execute(
+            """
+            update range_trader_setups
+            set payload_json = ?, updated_at = ?
+            where id = ?
+              and account_id = ?
+              and environment = ?
+            """,
+            (_serialize_json(payload), updated_at, setup_id, account_id, environment),
+        )
+    else:
+        connection.execute(
+            """
+            update range_trader_setups
+            set payload_json = ?, status = ?, updated_at = ?
+            where id = ?
+              and account_id = ?
+              and environment = ?
+            """,
+            (_serialize_json(payload), status, updated_at, setup_id, account_id, environment),
+        )
+    connection.commit()
+    return load_range_trader_setup(connection, setup_id=setup_id)
+
+
+def append_range_trader_event(connection: sqlite3.Connection, event: dict[str, Any]) -> dict[str, Any]:
+    now = _utc_now_iso()
+    prepared = {
+        **event,
+        "created_at": event.get("created_at") or now,
+        "payload_json": _serialize_json(event.get("payload") or {}),
+    }
+    connection.execute(
+        """
+        insert into range_trader_events (
+            id, setup_id, account_id, environment, created_at, level, event_type, message, payload_json
+        )
+        values (
+            :id, :setup_id, :account_id, :environment, :created_at, :level, :event_type, :message, :payload_json
+        )
+        """,
+        prepared,
+    )
+    connection.commit()
+    return prepared
+
+
+def load_range_trader_events(
+    connection: sqlite3.Connection,
+    *,
+    setup_id: str,
+    account_id: str,
+    environment: str,
+    limit: int = 100,
+) -> list[dict[str, Any]]:
+    cursor = connection.execute(
+        """
+        select *
+        from range_trader_events
+        where setup_id = ?
+          and account_id = ?
+          and environment = ?
+        order by created_at desc
+        limit ?
+        """,
+        (setup_id, account_id, environment, limit),
+    )
+    rows = []
+    for row in cursor.fetchall():
+        item = dict(row)
+        try:
+            item["payload"] = json.loads(item.pop("payload_json") or "{}")
+        except (TypeError, json.JSONDecodeError):
+            item["payload"] = {}
+        rows.append(item)
+    return rows
+
+
+def _decode_range_setup(row: dict[str, Any]) -> dict[str, Any]:
+    try:
+        payload = json.loads(row.pop("payload_json") or "{}")
+    except (TypeError, json.JSONDecodeError):
+        payload = {}
+    row["payload"] = payload if isinstance(payload, dict) else {}
+    row["exit_on_max_loss"] = bool(row.get("exit_on_max_loss"))
+    return row

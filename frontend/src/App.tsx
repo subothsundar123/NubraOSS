@@ -4,9 +4,12 @@ import AutomatePanel from './components/AutomatePanel'
 import IndicatorBuilder from './components/IndicatorBuilder'
 import PostLoginFooter from './components/PostLoginFooter'
 import PositioningDashboard from './components/positioning/PositioningDashboard'
+import RangeTrader from './components/RangeTrader'
 import ScalperLiveChart from './components/ScalperLiveChart'
 import StrategyBuilder from './components/StrategyBuilder'
 import VolumeDashboard from './components/VolumeDashboard'
+import OptionsIntelligenceEngine from './components/options-intelligence/OptionsIntelligenceEngine'
+import EducationPage from './components/EducationPage'
 import { DATA_ENVIRONMENT } from './constants/environment'
 import { useAutomation } from './hooks/useAutomation'
 import type { AutomateConfig } from './hooks/useAutomation'
@@ -18,7 +21,7 @@ type Environment = 'PROD' | 'UAT'
 type AuthMethod = 'otp' | 'totp'
 type Step = 'start' | 'otp' | 'totp' | 'mpin' | 'success'
 type SignedOutView = 'landing' | 'login'
-type View = SignedOutView | 'dashboard' | 'positioning' | 'no-code' | 'backtest-lab' | 'volume-breakout' | 'tradingview-webhook' | 'scalper' | 'execution-auth'
+type View = SignedOutView | 'dashboard' | 'positioning' | 'no-code' | 'backtest-lab' | 'volume-breakout' | 'tradingview-webhook' | 'scalper' | 'range-trader' | 'execution-auth' | 'options-intelligence' | 'education'
 type TradingViewMode = 'strategy' | 'line'
 type TradingViewAction = 'BUY' | 'SELL'
 type Interval = '1m' | '2m' | '3m' | '5m' | '15m' | '30m' | '1h'
@@ -61,7 +64,7 @@ interface SuccessResponse {
 
 interface ExecutionAuthRequest {
   environment: Environment
-  returnView: Extract<View, 'no-code' | 'volume-breakout' | 'tradingview-webhook' | 'scalper'>
+  returnView: Extract<View, 'no-code' | 'volume-breakout' | 'tradingview-webhook' | 'scalper' | 'range-trader' | 'positioning'>
   moduleLabel: string
   returnContext?: ExecutionAuthReturnContext
 }
@@ -759,6 +762,7 @@ export default function App() {
   const [scannerExecutionEnvironment, setScannerExecutionEnvironment] = useState<Environment>('PROD')
   const [webhookExecutionEnvironment, setWebhookExecutionEnvironment] = useState<Environment>('PROD')
   const [scalperExecutionEnvironment, setScalperExecutionEnvironment] = useState<Environment>('PROD')
+  const [rangeTraderExecutionEnvironment, setRangeTraderExecutionEnvironment] = useState<Environment>('PROD')
   const [pendingExecutionAuth, setPendingExecutionAuth] = useState<ExecutionAuthRequest | null>(null)
   const [scannerAuthReturnContext, setScannerAuthReturnContext] = useState<ExecutionAuthReturnContext | null>(null)
   const [postAuthScrollTop, setPostAuthScrollTop] = useState<number | null>(null)
@@ -883,7 +887,7 @@ export default function App() {
 
   function beginExecutionAuth(
     environmentToUse: Environment,
-    returnView: Extract<View, 'no-code' | 'volume-breakout' | 'tradingview-webhook' | 'scalper'>,
+    returnView: Extract<View, 'no-code' | 'volume-breakout' | 'tradingview-webhook' | 'scalper' | 'range-trader' | 'positioning'>,
     moduleLabel: string,
     returnContext?: ExecutionAuthReturnContext,
   ) {
@@ -964,6 +968,33 @@ export default function App() {
     setScalperExecutionEnvironment(environmentToUse)
   }
 
+  function handleRangeTraderExecutionEnvironmentSelect(environmentToUse: Environment) {
+    if (environmentToUse === 'PROD') {
+      setRangeTraderExecutionEnvironment('PROD')
+      return
+    }
+    const candidate = executionSessions[environmentToUse]
+    if (!candidate || hasSessionExpired(candidate)) {
+      if (candidate && hasSessionExpired(candidate)) {
+        clearExecutionSession(environmentToUse)
+      }
+      beginExecutionAuth(environmentToUse, 'range-trader', 'Range Trader')
+      return
+    }
+    setRangeTraderExecutionEnvironment(environmentToUse)
+  }
+
+  function handleRangeTraderAuthRequired(environmentToUse: Environment, authMessage: string) {
+    if (environmentToUse === 'PROD') {
+      resetSession(authMessage)
+      setView('login')
+      resetAuthFields(authMessage)
+      return
+    }
+    clearExecutionSession(environmentToUse)
+    beginExecutionAuth(environmentToUse, 'range-trader', 'Range Trader')
+  }
+
   function hasExecutionEnvironmentSession(environmentToUse: Environment): boolean {
     const candidate = executionSessions[environmentToUse]
     if (candidate && !candidate.is_demo && !hasSessionExpired(candidate)) {
@@ -1020,7 +1051,7 @@ export default function App() {
           </div>
           <span className="topbar-sep" />
           <nav className="topbar-nav" aria-label="Primary navigation">
-            {['Dashboard','Positioning','Scanner','Webhook','Scalper'].map((tab) => (
+            {['Dashboard','Positioning','Options Intelligence','Scanner','Webhook','Scalper','Range Trader','Academy'].map((tab) => (
               <button
                 key={tab}
                 type="button"
@@ -1028,9 +1059,12 @@ export default function App() {
                 onClick={() => {
                   if (tab === 'Dashboard') setView('dashboard')
                   else if (tab === 'Positioning') setView('positioning')
+                  else if (tab === 'Options Intelligence') setView('options-intelligence')
                   else if (tab === 'Scanner') setView('volume-breakout')
                   else if (tab === 'Webhook') setView('tradingview-webhook')
                   else if (tab === 'Scalper') setView('scalper')
+                  else if (tab === 'Range Trader') setView('range-trader')
+                  else if (tab === 'Academy') setView('education')
                 }}
               >
                 {tab}
@@ -1106,6 +1140,8 @@ export default function App() {
   const scalperRequestedPeStrike = scalperAutoAtmRequested ? 1 : parsedScalperPeStrike || 1
   const scalperExecutionSession = getExecutionSession(scalperExecutionEnvironment)
   const webhookExecutionSession = getExecutionSession(webhookExecutionEnvironment)
+  // Positioning shares any authenticated UAT execution session from any module
+  const positioningExecutionSession = executionSessions['UAT'] ?? null
   const scalperSnapshotMatchesSelection = snapshotMatchesScalperSelection({
     snapshot: scalperSnapshot,
     underlying: scalperUnderlying,
@@ -2292,6 +2328,8 @@ export default function App() {
           setWebhookExecutionEnvironment(pendingExecutionAuth.environment)
         } else if (pendingExecutionAuth.returnView === 'scalper') {
           setScalperExecutionEnvironment(pendingExecutionAuth.environment)
+        } else if (pendingExecutionAuth.returnView === 'range-trader') {
+          setRangeTraderExecutionEnvironment(pendingExecutionAuth.environment)
         }
         setPendingExecutionAuth(null)
         resetAuthFields(result.message)
@@ -2327,7 +2365,7 @@ export default function App() {
     )
   }
 
-  function handleDashboardCardOpen(nextView: Extract<View, 'positioning' | 'no-code' | 'backtest-lab' | 'volume-breakout' | 'tradingview-webhook' | 'scalper'>) {
+  function handleDashboardCardOpen(nextView: Extract<View, 'positioning' | 'no-code' | 'backtest-lab' | 'volume-breakout' | 'tradingview-webhook' | 'scalper' | 'range-trader' | 'options-intelligence'>) {
     setView(nextView)
   }
 
@@ -2550,11 +2588,33 @@ export default function App() {
   const [otpDigits, setOtpDigits] = useState(['','','','','',''])
   const [mpinDigits, setMpinDigits] = useState(['','','',''])
 
+  // Auto-focus first cell when OTP/TOTP step mounts
+  useEffect(() => {
+    if (step === 'otp' || step === 'totp') {
+      setOtpDigits(['', '', '', '', '', ''])
+      setTimeout(() => otpCells.current[0]?.focus(), 0)
+    }
+  }, [step])
+
   function handleOtpCell(index: number, value: string) {
     if (!/^\d?$/.test(value)) return
     const next = [...otpDigits]; next[index] = value; setOtpDigits(next); setOtp(next.join(''))
     if (value && index < 5) otpCells.current[index + 1]?.focus()
   }
+
+  function handleOtpPaste(e: React.ClipboardEvent, startIndex: number) {
+    e.preventDefault()
+    const digits = e.clipboardData.getData('text').replace(/\D/g, '').slice(0, 6 - startIndex)
+    if (!digits) return
+    const next = [...otpDigits]
+    for (let i = 0; i < digits.length; i++) next[startIndex + i] = digits[i]
+    setOtpDigits(next)
+    setOtp(next.join(''))
+    const lastFilled = Math.min(startIndex + digits.length - 1, 5)
+    const focusNext = lastFilled < 5 ? lastFilled + 1 : lastFilled
+    otpCells.current[focusNext]?.focus()
+  }
+
   function handleMpinCell(index: number, value: string) {
     if (!/^\d?$/.test(value)) return
     const next = [...mpinDigits]; next[index] = value; setMpinDigits(next); setMpin(next.join(''))
@@ -2567,73 +2627,94 @@ export default function App() {
   const currentStep = step === 'start' ? 0 : step === 'otp' || step === 'totp' ? 1 : 2
 
   // Ã¢â€â‚¬Ã¢â€â‚¬ Routing Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
+  // PositioningDashboard stays mounted for the entire authenticated session so its
+  // hooks keep running in the background even when navigating to other views.
+  const persistedPositioning = session ? (
+    <div style={{ display: view === 'positioning' ? 'block' : 'none' }}>
+      <PositioningDashboard
+        session={session}
+        executionSession={positioningExecutionSession}
+        onBack={() => setView('dashboard')}
+        onOpenScalper={() => setView('scalper')}
+        onRequestEnvAuth={(env) => {
+          if (env !== session.environment) {
+            beginExecutionAuth(env, 'positioning', 'Options Trading')
+          }
+        }}
+        renderNav={(activeTab: string) => renderDashboardNav(activeTab)}
+      />
+    </div>
+  ) : null
+
     if (view === 'no-code') {
       const noCodeExecutionSession = getExecutionSession(noCodeExecutionEnvironment)
       return (
-        <StrategyBuilder
-          apiBaseUrl={API_BASE_URL}
-          sessionToken={session?.access_token ?? ''}
-          deviceId={derivedDeviceId}
-          dataEnvironment={DATA_ENVIRONMENT}
-          prodSessionActive={hasExecutionEnvironmentSession('PROD')}
-          uatExecutionSessionActive={hasExecutionEnvironmentSession('UAT')}
-          executionEnvironment={noCodeExecutionEnvironment}
-          executionSessionToken={noCodeExecutionSession?.access_token ?? ''}
-          executionDeviceId={noCodeExecutionSession?.device_id ?? ''}
-          onExecutionEnvironmentSelect={handleNoCodeExecutionEnvironmentSelect}
-          onBack={() => setView('dashboard')}
-        renderNav={(activeTab: string) => renderDashboardNav(activeTab)}
-      />
+        <>
+          {persistedPositioning}
+          <StrategyBuilder
+            apiBaseUrl={API_BASE_URL}
+            sessionToken={session?.access_token ?? ''}
+            deviceId={derivedDeviceId}
+            dataEnvironment={DATA_ENVIRONMENT}
+            prodSessionActive={hasExecutionEnvironmentSession('PROD')}
+            uatExecutionSessionActive={hasExecutionEnvironmentSession('UAT')}
+            executionEnvironment={noCodeExecutionEnvironment}
+            executionSessionToken={noCodeExecutionSession?.access_token ?? ''}
+            executionDeviceId={noCodeExecutionSession?.device_id ?? ''}
+            onExecutionEnvironmentSelect={handleNoCodeExecutionEnvironmentSelect}
+            onBack={() => setView('dashboard')}
+            renderNav={(activeTab: string) => renderDashboardNav(activeTab)}
+          />
+        </>
     )
   }
 
     if (view === 'backtest-lab') {
       const noCodeExecutionSession = getExecutionSession(noCodeExecutionEnvironment)
       return (
-        <StrategyBuilder
-          apiBaseUrl={API_BASE_URL}
-          sessionToken={session?.access_token ?? ''}
-          deviceId={derivedDeviceId}
-          dataEnvironment={DATA_ENVIRONMENT}
-          prodSessionActive={hasExecutionEnvironmentSession('PROD')}
-          uatExecutionSessionActive={hasExecutionEnvironmentSession('UAT')}
-          executionEnvironment={noCodeExecutionEnvironment}
-          executionSessionToken={noCodeExecutionSession?.access_token ?? ''}
-          executionDeviceId={noCodeExecutionSession?.device_id ?? ''}
-          onExecutionEnvironmentSelect={handleNoCodeExecutionEnvironmentSelect}
-          onBack={() => setView('dashboard')}
-        renderNav={(activeTab: string) => renderDashboardNav(activeTab)}
-        mode="backtest"
-      />
+        <>
+          {persistedPositioning}
+          <StrategyBuilder
+            apiBaseUrl={API_BASE_URL}
+            sessionToken={session?.access_token ?? ''}
+            deviceId={derivedDeviceId}
+            dataEnvironment={DATA_ENVIRONMENT}
+            prodSessionActive={hasExecutionEnvironmentSession('PROD')}
+            uatExecutionSessionActive={hasExecutionEnvironmentSession('UAT')}
+            executionEnvironment={noCodeExecutionEnvironment}
+            executionSessionToken={noCodeExecutionSession?.access_token ?? ''}
+            executionDeviceId={noCodeExecutionSession?.device_id ?? ''}
+            onExecutionEnvironmentSelect={handleNoCodeExecutionEnvironmentSelect}
+            onBack={() => setView('dashboard')}
+            renderNav={(activeTab: string) => renderDashboardNav(activeTab)}
+            mode="backtest"
+          />
+        </>
     )
   }
 
   if (view === 'positioning') {
-    return (
-      <PositioningDashboard
-        session={session!}
-        onBack={() => setView('dashboard')}
-        onOpenScalper={() => setView('scalper')}
-        renderNav={(activeTab: string) => renderDashboardNav(activeTab)}
-      />
-    )
+    return <>{persistedPositioning}</>
   }
 
   if (view === 'volume-breakout') {
     const scannerExecutionSession = getExecutionSession(scannerExecutionEnvironment)
     return (
-      <VolumeDashboard
-        session={session!}
-        executionEnvironment={scannerExecutionEnvironment}
-        executionSessionToken={scannerExecutionSession?.access_token ?? ''}
-        executionDeviceId={scannerExecutionSession?.device_id ?? ''}
-        hasExecutionSession={Boolean(scannerExecutionSession)}
-        authReturnContext={scannerAuthReturnContext}
-        onAuthReturnContextConsumed={() => setScannerAuthReturnContext(null)}
-        onExecutionEnvironmentSelect={handleScannerExecutionEnvironmentSelect}
-        onBack={() => setView('dashboard')}
-        renderNav={(activeTab: string) => renderDashboardNav(activeTab)}
-      />
+      <>
+        {persistedPositioning}
+        <VolumeDashboard
+          session={session!}
+          executionEnvironment={scannerExecutionEnvironment}
+          executionSessionToken={scannerExecutionSession?.access_token ?? ''}
+          executionDeviceId={scannerExecutionSession?.device_id ?? ''}
+          hasExecutionSession={Boolean(scannerExecutionSession)}
+          authReturnContext={scannerAuthReturnContext}
+          onAuthReturnContextConsumed={() => setScannerAuthReturnContext(null)}
+          onExecutionEnvironmentSelect={handleScannerExecutionEnvironmentSelect}
+          onBack={() => setView('dashboard')}
+          renderNav={(activeTab: string) => renderDashboardNav(activeTab)}
+        />
+      </>
     )
   }
 
@@ -2642,6 +2723,8 @@ export default function App() {
     const webhookUserLabel = webhookExecutionSession?.user_name ?? session?.user_name ?? 'Nubra User'
     const webhookExecutionReady = webhookExecutionEnvironment === 'UAT' && Boolean(webhookExecutionSession) && !session?.is_demo
     return (
+      <>
+      {persistedPositioning}
       <div className="subview-shell">
         {renderDashboardNav('Webhook')}
         <main className="subview-main webhook-main">
@@ -2838,6 +2921,27 @@ export default function App() {
           <PostLoginFooter />
         </main>
       </div>
+      </>
+    )
+  }
+
+  if (view === 'range-trader') {
+    if (!session) {
+      setView('dashboard')
+      return null
+    }
+    const rangeTraderExecutionSession = rangeTraderExecutionEnvironment === 'PROD'
+      ? session
+      : executionSessions[rangeTraderExecutionEnvironment]
+    return (
+      <RangeTrader
+        session={rangeTraderExecutionSession ?? session}
+        executionEnvironment={rangeTraderExecutionEnvironment}
+        onExecutionEnvironmentChange={handleRangeTraderExecutionEnvironmentSelect}
+        onAuthRequired={handleRangeTraderAuthRequired}
+        onBack={() => setView('dashboard')}
+        renderNav={(activeTab: string) => renderDashboardNav(activeTab)}
+      />
     )
   }
 
@@ -2855,6 +2959,8 @@ export default function App() {
     const scalperExecutionLabel = scalperExecutionSession?.environment ?? scalperExecutionEnvironment
 
     return (
+      <>
+      {persistedPositioning}
       <div className="subview-shell">
         {renderDashboardNav('Scalper')}
         <main className="subview-main scalper-main">
@@ -3396,6 +3502,7 @@ export default function App() {
           )}
         </main>
       </div>
+      </>
     )
   }
 
@@ -3466,13 +3573,38 @@ export default function App() {
     )
   }
 
+  if (view === 'education') {
+    return (
+      <div className="dash">
+        {renderDashboardNav('Academy')}
+        <EducationPage onClose={() => setView('dashboard')} />
+      </div>
+    )
+  }
+
+  if (view === 'options-intelligence' && session) {
+    return (
+      <div className="dash">
+        {renderDashboardNav('Options Intelligence')}
+        <OptionsIntelligenceEngine
+          sessionToken={session.access_token}
+          deviceId={derivedDeviceId}
+          environment={DATA_ENVIRONMENT}
+        />
+      </div>
+    )
+  }
+
   if (view === 'dashboard') {
     const moduleCards = [
-      { key: 'no-code' as const,            title: 'No Code',            sub: 'Visual strategy authoring',    accent: 'rgb(124,207,94)',  glow: '124,207,94',  icon: 'backtest' },
-      { key: 'positioning' as const,        title: 'Positioning OS',     sub: 'Realtime market intelligence', accent: 'rgb(120,201,255)', glow: '120,201,255', icon: 'positioning' },
+
+      { key: 'no-code' as const,                title: 'No Code',            sub: 'Visual strategy authoring',    accent: 'rgb(124,207,94)',  glow: '124,207,94',  icon: 'backtest' },
+      { key: 'positioning' as const,            title: 'Positioning OS',     sub: 'Realtime market intelligence', accent: 'rgb(120,201,255)', glow: '120,201,255', icon: 'positioning' },
+      { key: 'options-intelligence' as const,   title: 'Options Intelligence', sub: 'GEX · IV · Dealer flow · Signals', accent: 'rgb(200,160,255)', glow: '200,160,255', icon: 'options' },
       { key: 'volume-breakout' as const,     title: 'Volume Breakout',    sub: 'Market-wide breakout scanner', accent: 'rgb(120,201,255)', glow: '120,201,255', icon: 'platform' },
       { key: 'tradingview-webhook' as const, title: 'Webhook Strategies', sub: 'Signal-driven automation',     accent: 'rgb(177,102,16)',  glow: '177,102,16',  icon: 'webhook'  },
       { key: 'scalper' as const,             title: 'Scalper',            sub: 'Intraday live charts',          accent: 'rgb(149,220,122)', glow: '149,220,122', icon: 'chain'    },
+      { key: 'range-trader' as const,        title: 'Range Trader',       sub: 'Line-based EQ/F&O execution',   accent: 'rgb(103,232,249)', glow: '103,232,249', icon: 'range'    },
       { key: 'backtest-lab' as const,         title: 'Backtest Lab',       sub: 'Historical strategy testing',   accent: 'rgb(0,118,196)',   glow: '0,118,196',   icon: 'book'     },
       { key: null,                           title: 'Risk & Tools',       sub: 'Exposure & position sizing',   accent: 'rgb(241,66,66)',   glow: '241,66,66',   icon: 'risk'     },
     ]
@@ -3483,9 +3615,13 @@ export default function App() {
       webhook:  <><circle cx={7} cy={7} r={2.5}/><circle cx={17} cy={17} r={2.5}/><circle cx={17} cy={7} r={2.5}/><path d="M9 8.5L15 15.5M15 7h-6"/></>,
       book:     <><path d="M4 5v15a1 1 0 001 1h15V6a2 2 0 00-2-2H6a2 2 0 00-2 1z"/><path d="M8 9h8M8 13h8M8 17h5"/></>,
       chain:    <><path d="M4 6h16M4 10h16M4 14h16M4 18h16"/><path d="M12 4v16"/></>,
+      range:    <><path d="M4 18h16"/><path d="M5 14l5-5 4 3 5-7"/><path d="M6 7h6"/><path d="M14 14h5"/></>,
       risk:     <><path d="M12 3l8 4v5c0 5-3.5 8-8 9-4.5-1-8-4-8-9V7l8-4z"/><path d="M12 9v4M12 16v.01"/></>,
+      options:  <><circle cx={12} cy={12} r={9}/><path d="M9 12l2 2 4-4"/><path d="M12 6v2M12 16v2M6 12H8M16 12h2"/></>,
     }
     return (
+      <>
+      {persistedPositioning}
       <div className="dash">
         {renderDashboardNav('Dashboard')}
         <main className="dash-main">
@@ -3557,10 +3693,11 @@ export default function App() {
           <PostLoginFooter />
         </main>
       </div>
+      </>
     )
   }
 
-  // Ã¢â€â‚¬Ã¢â€â‚¬ Login Screen Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
+  //Ã¢â€â‚¬Ã¢â€â‚¬ Login Screen Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
   const isExecutionAuthScreen = view === 'execution-auth' && Boolean(pendingExecutionAuth)
   const authEnvironment = pendingExecutionAuth?.environment ?? DATA_ENVIRONMENT
   const authModuleLabel = pendingExecutionAuth?.moduleLabel ?? 'this module'
@@ -3691,6 +3828,7 @@ export default function App() {
                       <input key={idx} ref={(el) => { otpCells.current[idx] = el }} className="otp-cell" value={digit}
                         onChange={(e) => handleOtpCell(idx, e.target.value.slice(-1))}
                         onKeyDown={(e) => { if (e.key === 'Backspace' && !digit) otpCells.current[idx-1]?.focus() }}
+                        onPaste={(e) => handleOtpPaste(e, idx)}
                         inputMode="numeric" maxLength={1} />
                     ))}
                   </div>
@@ -3711,6 +3849,7 @@ export default function App() {
                       <input key={idx} ref={(el) => { otpCells.current[idx] = el }} className="otp-cell" value={digit}
                         onChange={(e) => handleOtpCell(idx, e.target.value.slice(-1))}
                         onKeyDown={(e) => { if (e.key === 'Backspace' && !digit) otpCells.current[idx-1]?.focus() }}
+                        onPaste={(e) => handleOtpPaste(e, idx)}
                         inputMode="numeric" maxLength={1} />
                     ))}
                   </div>

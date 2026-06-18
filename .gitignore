@@ -1,5 +1,7 @@
 .venv/
 backend/.venv/
+backend/venv/
+.local-node/
 frontend/node_modules/
 frontend/dist/
 __pycache__/
@@ -7,6 +9,7 @@ __pycache__/
 .env
 .codex-logs/
 backend/data/
+data/*.sqlite3
 backend/*.log
 backend/*.err.log
 frontend/*.log

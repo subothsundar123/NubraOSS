@@ -6,6 +6,8 @@ from pydantic import BaseModel, Field
 Environment = Literal["PROD", "UAT"]
 AuthMethod = Literal["otp", "totp"]
 VolumeUniverseMode = Literal["top120", "top300", "all_nse"]
+RangeTraderPositionStatus = Literal["idle", "entry_pending", "in_position", "exit_pending", "closed"]
+RangeTraderExchange = Literal["NSE", "BSE", "NFO"]
 
 
 class StartLoginRequest(BaseModel):
@@ -309,7 +311,7 @@ class ScalperOrderRequest(BaseModel):
     lot_size: int = Field(ge=1, le=1000000)
     tick_size: int = Field(ge=1, le=1000000)
     ltp_price: float | None = Field(default=None, ge=0)
-    order_delivery_type: Literal["ORDER_DELIVERY_TYPE_CNC", "ORDER_DELIVERY_TYPE_IDAY"] = "ORDER_DELIVERY_TYPE_IDAY"
+    order_delivery_type: Literal["ORDER_DELIVERY_TYPE_CNC", "ORDER_DELIVERY_TYPE_IDAY", "ORDER_DELIVERY_TYPE_NRML"] = "ORDER_DELIVERY_TYPE_IDAY"
     exchange: Literal["NSE", "BSE"] = "NSE"
     tag: str | None = Field(default=None, max_length=128)
 
@@ -388,6 +390,43 @@ class ScannerOrderSubmitResponse(BaseModel):
     instrument_display_name: str
     symbol: str
     environment: Environment
+
+
+class PositioningOptionOrderPreviewRequest(BaseModel):
+    session_token: str = Field(min_length=10)
+    device_id: str = Field(min_length=3, max_length=128)
+    environment: Environment
+    underlying: str = Field(min_length=1, max_length=32)
+    strike_price: float = Field(gt=0)
+    option_type: Literal["CE", "PE"]
+    expiry: str | None = None
+    ref_id: int | None = None
+    order_side: Literal["ORDER_SIDE_BUY", "ORDER_SIDE_SELL"]
+    lots: int = Field(default=1, ge=1, le=500)
+    ltp_price: float = Field(gt=0)
+    exchange: Literal["NSE", "BSE"] = "NSE"
+    order_delivery_type: Literal["ORDER_DELIVERY_TYPE_IDAY", "ORDER_DELIVERY_TYPE_NRML"] = "ORDER_DELIVERY_TYPE_NRML"
+
+
+class PositioningOptionOrderPreviewResponse(BaseModel):
+    status: Literal["success"]
+    environment: Environment
+    underlying: str
+    strike_price: float
+    option_type: Literal["CE", "PE"]
+    expiry: str | None
+    instrument_ref_id: int
+    instrument_display_name: str
+    lot_size: int
+    tick_size: int
+    lots: int
+    order_qty: int
+    ltp_price: float
+    preview_limit_price: float
+    estimated_order_value: float
+    order_side: Literal["ORDER_SIDE_BUY", "ORDER_SIDE_SELL"]
+    order_delivery_type: Literal["ORDER_DELIVERY_TYPE_IDAY", "ORDER_DELIVERY_TYPE_NRML"]
+    tag: str
 
 
 class DeltaNeutralPairRow(BaseModel):
@@ -517,6 +556,213 @@ class StockSearchItem(BaseModel):
 
 class StockSearchResponse(BaseModel):
     items: list[StockSearchItem]
+
+
+class RangeTraderInstrumentSearchRequest(BaseModel):
+    session_token: str = Field(min_length=10)
+    device_id: str = Field(min_length=3, max_length=128)
+    environment: Environment
+    query: str = Field(min_length=1, max_length=128)
+    limit: int = Field(default=12, ge=1, le=40)
+
+
+class RangeTraderInstrument(BaseModel):
+    symbol: str
+    display_name: str
+    exchange: RangeTraderExchange
+    instrument_type: str
+    derivative_type: str | None = None
+    option_type: str | None = None
+    expiry: str | None = None
+    strike_price: float | None = None
+    chart_symbol: str | None = None
+    ltp_hint: float | None = Field(default=None, gt=0)
+    ref_id: int
+    tick_size: int
+    lot_size: int
+
+
+class RangeTraderInstrumentSearchResponse(BaseModel):
+    items: list[RangeTraderInstrument]
+
+
+class RangeTraderOptionResolveRequest(BaseModel):
+    session_token: str = Field(min_length=10)
+    device_id: str = Field(min_length=3, max_length=128)
+    environment: Environment
+    underlying: str = Field(default="NIFTY", min_length=1, max_length=32)
+    strike_price: float = Field(gt=0)
+    option_type: Literal["CE", "PE"]
+    expiry: str | None = None
+    exchange: RangeTraderExchange = "NFO"
+    ref_id: int | None = Field(default=None, ge=1)
+    ltp_hint: float | None = Field(default=None, gt=0)
+
+
+class RangeTraderOptionResolveResponse(BaseModel):
+    status: Literal["success"]
+    instrument: RangeTraderInstrument
+
+
+class RangeTraderCandle(BaseModel):
+    epoch_ms: int
+    open: float
+    high: float
+    low: float
+    close: float
+    volume: float | None = None
+
+
+class RangeTraderChartRequest(BaseModel):
+    session_token: str = Field(min_length=10)
+    device_id: str = Field(min_length=3, max_length=128)
+    environment: Environment
+    symbol: str = Field(min_length=1, max_length=128)
+    ref_id: int | None = Field(default=None, ge=1)
+    display_name: str | None = Field(default=None, max_length=128)
+    chart_symbol: str | None = Field(default=None, max_length=128)
+    exchange: RangeTraderExchange = "NSE"
+    instrument_type: str = Field(default="STOCK", min_length=2, max_length=32)
+    derivative_type: str | None = Field(default=None, max_length=32)
+    option_type: Literal["CE", "PE"] | None = None
+    expiry: str | None = Field(default=None, max_length=32)
+    strike_price: float | None = Field(default=None, gt=0)
+    ltp_hint: float | None = Field(default=None, gt=0)
+    timeframe: Literal["1m", "3m", "5m", "15m"] = "1m"
+    lookback_days: int = Field(default=7, ge=1, le=15)
+
+
+class RangeTraderChartResponse(BaseModel):
+    status: Literal["success"]
+    instrument: RangeTraderInstrument
+    timeframe: Literal["1m", "3m", "5m", "15m"]
+    last_price: float | None
+    candles: list[RangeTraderCandle]
+    synthetic: bool = False
+    synthetic_reason: str | None = None
+
+
+class RangeTraderLine(BaseModel):
+    id: str
+    role: Literal["entry", "exit", "target", "stop_loss", "alert"]
+    shape: Literal["level", "trend"] = "level"
+    label: str
+    trigger: Literal["touch", "cross", "close_above", "close_below"] = "touch"
+    repeat_policy: Literal["once", "every_touch", "after_reset_distance", "after_exit"] = "once"
+    reset_distance: float | None = Field(default=None, ge=0)
+    close_buffer: float | None = Field(default=None, ge=0)
+    armed: bool = True
+    points: list[dict[str, float]]
+
+
+class RangeTraderSetupPayload(BaseModel):
+    lines: list[RangeTraderLine] = Field(default_factory=list)
+    entries: list[dict[str, Any]] = Field(default_factory=list)
+    line_states: dict[str, dict[str, Any]] = Field(default_factory=dict)
+    position_status: RangeTraderPositionStatus = "idle"
+    open_quantity: int = Field(default=0, ge=0)
+    entry_order_id: int | None = None
+    exit_order_id: int | None = None
+    entry_price: float | None = None
+    exit_price: float | None = None
+    limit_price: float | None = Field(default=None, gt=0)
+    notes: str | None = Field(default=None, max_length=1000)
+
+
+class RangeTraderSetupUpsertRequest(BaseModel):
+    session_token: str = Field(min_length=10)
+    device_id: str = Field(min_length=3, max_length=128)
+    account_id: str = Field(min_length=1, max_length=128)
+    environment: Environment
+    id: str | None = Field(default=None, max_length=64)
+    title: str = Field(default="Range Trader", min_length=1, max_length=128)
+    instrument: RangeTraderInstrument
+    timeframe: Literal["1m", "3m", "5m", "15m"] = "1m"
+    side: Literal["BUY", "SELL"] = "BUY"
+    quantity: int = Field(default=1, ge=1, le=1000000)
+    order_type: Literal["AGGRESSIVE_LIMIT", "MARKET", "LIMIT"] = "AGGRESSIVE_LIMIT"
+    tolerance_value: float = Field(default=0.05, ge=0)
+    tolerance_mode: Literal["percent", "ticks", "points"] = "percent"
+    max_loss: float | None = Field(default=None, ge=0)
+    exit_on_max_loss: bool = True
+    status: Literal["draft", "armed", "paused", "stopped", "risk_locked"] = "draft"
+    payload: RangeTraderSetupPayload = Field(default_factory=RangeTraderSetupPayload)
+
+
+class RangeTraderSetup(BaseModel):
+    id: str
+    account_id: str
+    environment: Environment
+    title: str
+    symbol: str
+    display_name: str
+    exchange: RangeTraderExchange
+    instrument_type: str
+    derivative_type: str | None = None
+    option_type: str | None = None
+    expiry: str | None = None
+    strike_price: float | None = None
+    ref_id: int
+    tick_size: int
+    lot_size: int
+    timeframe: Literal["1m", "3m", "5m", "15m"]
+    side: Literal["BUY", "SELL"]
+    quantity: int
+    order_type: Literal["AGGRESSIVE_LIMIT", "MARKET", "LIMIT"]
+    tolerance_value: float
+    tolerance_mode: Literal["percent", "ticks", "points"]
+    max_loss: float | None = None
+    exit_on_max_loss: bool
+    status: Literal["draft", "armed", "paused", "stopped", "risk_locked"]
+    created_at: str
+    updated_at: str
+    payload: RangeTraderSetupPayload
+
+
+class RangeTraderSetupListRequest(BaseModel):
+    session_token: str = Field(min_length=10)
+    device_id: str = Field(min_length=3, max_length=128)
+    account_id: str = Field(min_length=1, max_length=128)
+    environment: Environment
+
+
+class RangeTraderSetupListResponse(BaseModel):
+    setups: list[RangeTraderSetup]
+
+
+class RangeTraderSetupResponse(BaseModel):
+    status: Literal["success"]
+    setup: RangeTraderSetup
+
+
+class RangeTraderControlRequest(BaseModel):
+    session_token: str = Field(min_length=10)
+    device_id: str = Field(min_length=3, max_length=128)
+    setup_id: str = Field(min_length=1, max_length=64)
+    account_id: str = Field(min_length=1, max_length=128)
+    environment: Environment
+
+
+class RangeTraderKillRequest(RangeTraderControlRequest):
+    session_token: str = Field(min_length=10)
+    device_id: str = Field(min_length=3, max_length=128)
+    exit_open_entries: bool = True
+
+
+class RangeTraderEvent(BaseModel):
+    id: str
+    setup_id: str
+    account_id: str
+    environment: Environment
+    created_at: str
+    level: Literal["info", "success", "warn", "error"]
+    event_type: str
+    message: str
+    payload: dict[str, Any] = Field(default_factory=dict)
+
+
+class RangeTraderEventsResponse(BaseModel):
+    events: list[RangeTraderEvent]
 
 
 class StrategyBacktestRequest(BaseModel):
@@ -843,6 +1089,213 @@ class PositioningCandlesResponse(BaseModel):
     points: list[VolumeBreakoutDrilldownPoint]
 
 
+class PositioningIndexCandlesRequest(BaseModel):
+    session_token: str = Field(min_length=10)
+    device_id: str = Field(min_length=3, max_length=128)
+    environment: Environment
+    underlying: str = Field(default="NIFTY", min_length=1, max_length=32)
+
+
+class PositioningIndexCandlesResponse(BaseModel):
+    underlying: str
+    interval: str = "1m"
+    points: list[VolumeBreakoutDrilldownPoint]
+    is_stale: bool = False
+    session_date: str | None = None
+    fetch_error: str | None = None
+
+
+class OptionChainStrikeRow(BaseModel):
+    strike_price: int
+    distance_from_spot: int
+    is_atm: bool
+    ce_ref_id: int | None = None
+    ce_oi: float | None = None
+    ce_oi_change: float | None = None
+    ce_iv: float | None = None
+    ce_ltp: float | None = None
+    ce_delta: float | None = None
+    ce_gamma: float | None = None
+    ce_theta: float | None = None
+    ce_vega: float | None = None
+    ce_volume: float | None = None
+    pe_ref_id: int | None = None
+    pe_oi: float | None = None
+    pe_oi_change: float | None = None
+    pe_iv: float | None = None
+    pe_ltp: float | None = None
+    pe_delta: float | None = None
+    pe_gamma: float | None = None
+    pe_theta: float | None = None
+    pe_vega: float | None = None
+    pe_volume: float | None = None
+
+
+class PositioningOptionCandlesRequest(BaseModel):
+    session_token: str = Field(min_length=10)
+    device_id: str = Field(min_length=3, max_length=128)
+    environment: Environment
+    underlying: str = Field(min_length=1, max_length=32)
+    strike_price: float
+    option_type: str = Field(min_length=2, max_length=2)
+    expiry: str | None = None
+
+
+class PositioningIntradayBootstrapRequest(BaseModel):
+    session_token: str = Field(min_length=10)
+    device_id: str = Field(min_length=3, max_length=128)
+    environment: Environment
+    max_symbols: int = Field(default=100, ge=10, le=200)
+
+
+class PositioningIntradayBootstrapResponse(BaseModel):
+    injected: int
+    total_fetched: int
+    symbols_attempted: int
+    duration_ms: int
+    session_date: str
+
+
+class PositioningOptionChainRequest(BaseModel):
+    session_token: str = Field(min_length=10)
+    device_id: str = Field(min_length=3, max_length=128)
+    environment: Environment
+    underlying: str = Field(default="NIFTY", min_length=1, max_length=32)
+    expiry: str | None = None
+
+
+class PositioningOptionChainResponse(BaseModel):
+    underlying: str
+    spot_price: float | None
+    atm_strike: int | None
+    expiry: str | None
+    pcr: float | None
+    max_pain: int | None
+    straddle_price: float | None
+    total_ce_oi: float | None
+    total_pe_oi: float | None
+    strikes: list[OptionChainStrikeRow]
+    fetched_at: str
+    market_closed: bool = False
+    lot_size: int = 1
+
+
+# ── Options Intelligence Engine (OIE) ────────────────────────────────────────
+
+class OIEChainRequest(BaseModel):
+    session_token: str = Field(min_length=10)
+    device_id: str = Field(min_length=3, max_length=128)
+    environment: Environment
+    underlying: str = Field(default="NIFTY", min_length=1, max_length=32)
+    expiry: str | None = None
+
+
+class OIEChainStrikeRow(BaseModel):
+    strike_price: int
+    distance_from_spot: int
+    is_atm: bool
+    # CE side
+    ce_ref_id: int | None = None
+    ce_oi: float | None = None
+    ce_oi_change: float | None = None
+    ce_iv: float | None = None
+    ce_ltp: float | None = None
+    ce_delta: float | None = None
+    ce_gamma: float | None = None
+    ce_theta: float | None = None
+    ce_vega: float | None = None
+    ce_volume: float | None = None
+    ce_gex: float | None = None
+    # PE side
+    pe_ref_id: int | None = None
+    pe_oi: float | None = None
+    pe_oi_change: float | None = None
+    pe_iv: float | None = None
+    pe_ltp: float | None = None
+    pe_delta: float | None = None
+    pe_gamma: float | None = None
+    pe_theta: float | None = None
+    pe_vega: float | None = None
+    pe_volume: float | None = None
+    pe_gex: float | None = None
+    # Per-strike net
+    net_gex: float | None = None
+
+
+class OIEGreeksAggregates(BaseModel):
+    lot_size: int = 1
+    net_delta: float | None = None
+    net_gamma: float | None = None
+    net_vega: float | None = None
+    net_theta: float | None = None
+    total_gex: float | None = None
+    gamma_flip_level: int | None = None
+    call_wall: int | None = None
+    put_wall: int | None = None
+    gex_bias: str = "neutral"
+    ce_gex_total: float | None = None
+    pe_gex_total: float | None = None
+
+
+class OIEChainResponse(BaseModel):
+    underlying: str
+    spot_price: float | None = None
+    atm_strike: int | None = None
+    expiry: str | None = None
+    lot_size: int = 1
+    pcr: float | None = None
+    max_pain: int | None = None
+    straddle_price: float | None = None
+    total_ce_oi: float | None = None
+    total_pe_oi: float | None = None
+    strikes: list[OIEChainStrikeRow] = Field(default_factory=list)
+    aggregates: OIEGreeksAggregates
+    fetched_at: str
+    market_closed: bool = False
+
+
+class OIEAnalyticsRequest(BaseModel):
+    session_token: str = Field(min_length=10)
+    device_id: str = Field(min_length=3, max_length=128)
+    environment: Environment
+    underlying: str = Field(default="NIFTY", min_length=1, max_length=32)
+    expiry: str | None = None
+
+
+class OIEAnalyticsResponse(BaseModel):
+    underlying: str
+    spot_price: float | None = None
+    fetched_at: str
+    metrics: dict[str, Any] = Field(default_factory=dict)
+
+
+class OIEIntelligenceRequest(BaseModel):
+    session_token: str = Field(min_length=10)
+    device_id: str = Field(min_length=3, max_length=128)
+    environment: Environment
+    underlying: str = Field(default="NIFTY", min_length=1, max_length=32)
+    expiry: str | None = None
+
+
+class OIEIntelligenceResponse(BaseModel):
+    underlying: str
+    spot_price: float | None = None
+    atm_strike: int | None = None
+    fetched_at: str
+    market_bias: str = "Neutral"
+    confidence_score: float = 50.0
+    volatility_regime: str = "Normal"
+    gamma_regime: str = "Neutral"
+    dealer_positioning: str = "Neutral"
+    expected_move_daily: str = "N/A"
+    expected_move_weekly: str = "N/A"
+    option_seller_favorability: str = "Medium"
+    key_levels: dict[str, Any] = Field(default_factory=dict)
+    interpretation_bullets: list[str] = Field(default_factory=list)
+    metric_summary: dict[str, str] = Field(default_factory=dict)
+    metrics: dict[str, Any] = Field(default_factory=dict)
+
+
 class VolumeBreakoutStartResponse(BaseModel):
     status: str
     message: str
@@ -860,3 +1313,69 @@ class MarketStatusResponse(BaseModel):
     last_session_date: str
     next_open_ist: str
     current_ist: str
+
+
+class PositioningPositionsRequest(BaseModel):
+    session_token: str = Field(min_length=10)
+    device_id: str = Field(min_length=3, max_length=128)
+    environment: Environment
+
+class PositioningPositionItem(BaseModel):
+    ref_id: int
+    display_name: str
+    underlying: str
+    strike_price: float | None = None  # rupees
+    option_type: str | None = None     # CE or PE
+    lot_size: int
+    qty: int
+    avg_price: float   # rupees
+    ltp: float         # rupees
+    pnl: float         # rupees
+    pnl_pct: float | None = None
+    product: str       # ORDER_DELIVERY_TYPE_CNC etc
+    side: str          # BUY / SELL
+    expiry: str | None = None
+    zanskar_name: str | None = None
+
+class PositioningPositionsResponse(BaseModel):
+    positions: list[PositioningPositionItem]
+    total_pnl: float
+
+class PositioningOrdersRequest(BaseModel):
+    session_token: str = Field(min_length=10)
+    device_id: str = Field(min_length=3, max_length=128)
+    environment: Environment
+
+class PositioningOrderItem(BaseModel):
+    order_id: int
+    ref_id: int
+    display_name: str
+    order_side: str      # ORDER_SIDE_BUY / SELL
+    order_status: str
+    order_price: float   # rupees
+    order_qty: int
+    order_delivery_type: str
+    tag: str | None = None
+    order_time: int | None = None   # epoch ns
+
+class PositioningOrdersResponse(BaseModel):
+    orders: list[PositioningOrderItem]
+
+class PositioningExitRequest(BaseModel):
+    session_token: str = Field(min_length=10)
+    device_id: str = Field(min_length=3, max_length=128)
+    environment: Environment
+    ref_id: int
+    display_name: str
+    option_leg: Literal["CE", "PE"] = "CE"
+    exit_side: Literal["ORDER_SIDE_BUY", "ORDER_SIDE_SELL"]
+    qty: int = Field(ge=1)
+    lot_size: int = Field(ge=1)
+    ltp: float = Field(gt=0)
+    order_delivery_type: Literal["ORDER_DELIVERY_TYPE_CNC", "ORDER_DELIVERY_TYPE_IDAY", "ORDER_DELIVERY_TYPE_NRML"] = "ORDER_DELIVERY_TYPE_CNC"
+
+class PositioningExitResponse(BaseModel):
+    status: Literal["success"]
+    message: str
+    order_id: int | None
+    order_status: str | None

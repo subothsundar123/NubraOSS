@@ -4,6 +4,7 @@ import { ConfidenceBar, DirectionBadge, ScorePill, SignalChip } from '../dashboa
 import InfoTip from '../InfoTip'
 import type { PositioningSnapshot } from '../../positioning/types'
 import { useInstrumentContext } from '../../positioning/useInstrumentContext'
+import TradePanel, { type EquityInstrument } from './TradePanel'
 
 interface InstrumentDetailDrawerProps {
   symbol: string | null
@@ -61,6 +62,7 @@ export default function InstrumentDetailDrawer({
 }: InstrumentDetailDrawerProps) {
   // ── Panel visibility state — independent of symbol selection ──────────────
   const [panelOpen, setPanelOpen] = useState(false)
+  const [tradeOpen, setTradeOpen] = useState(false)
 
   // Auto-open only when user explicitly selects a symbol (symbol transitions null→value)
   const prevSymbol = useRef<string | null>(null)
@@ -323,6 +325,33 @@ export default function InstrumentDetailDrawer({
             <p key={alert.id}><strong>{alert.title}:</strong> {alert.message}</p>
           ))}
           {contextualAlerts.length === 0 ? <p>No symbol-specific alerts. Watch for sector rotation, regime changes and abnormal volume expansion.</p> : null}
+        </section>
+
+        {/* Trade section */}
+        <section className="positioning-detail-section">
+          <button
+            className="trade-section-toggle"
+            onClick={() => setTradeOpen((v) => !v)}
+            aria-expanded={tradeOpen}
+          >
+            <span>Trade {symbol ?? ''}</span>
+            <span className="trade-section-env-badge">{session.environment}</span>
+            <span style={{ marginLeft: 'auto' }}>{tradeOpen ? '▲' : '▼'}</span>
+          </button>
+          {tradeOpen && symbol && (
+            <TradePanel
+              instrument={{
+                mode: 'equity',
+                symbol,
+                exchange: (opportunity?.exchange as 'NSE' | 'BSE') ?? 'NSE',
+                displayName: opportunity?.display_name ?? symbol,
+              } satisfies EquityInstrument}
+              suggestedPrice={latestPrice}
+              session={session}
+              defaultSide="BUY"
+              onOrderPlaced={() => undefined}
+            />
+          )}
         </section>
       </div>
     </aside>

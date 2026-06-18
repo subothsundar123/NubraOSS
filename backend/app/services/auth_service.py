@@ -1,6 +1,6 @@
 import base64
 import json
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from secrets import token_urlsafe
 
 import httpx
@@ -20,6 +20,8 @@ from app.schemas import (
     VerifyTotpResponse,
 )
 from app.services.instrument_service import instrument_service
+
+UTC = timezone.utc
 
 
 class AuthService:
@@ -160,42 +162,27 @@ class AuthService:
 
         try:
             with httpx.Client(timeout=20.0) as client:
-                first_response = client.post(
-                    f"{base_url}/sendphoneotp",
-                    json={"phone": payload.phone, "skip_totp": False},
-                    headers={"Content-Type": "application/json"},
-                )
-                if first_response.status_code >= 400:
-                    raise HTTPException(
-                        status_code=first_response.status_code,
-                        detail=self._extract_error(first_response),
-                    )
-
-                response_payload = first_response.json()
-                temp_token = response_payload.get("temp_token")
-                if not temp_token:
-                    raise HTTPException(
-                        status_code=502,
-                        detail="Nubra did not return temp_token in the initial OTP step.",
-                    )
-
-                second_response = client.post(
+                response = client.post(
                     f"{base_url}/sendphoneotp",
                     json={"phone": payload.phone, "skip_totp": True},
                     headers={
                         "Content-Type": "application/json",
-                        "x-temp-token": temp_token,
                         "x-device-id": device_id,
                     },
                 )
-                if second_response.status_code >= 400:
+                if response.status_code >= 400:
                     raise HTTPException(
-                        status_code=second_response.status_code,
-                        detail=self._extract_error(second_response),
+                        status_code=response.status_code,
+                        detail=self._extract_error(response),
                     )
 
-                second_payload = second_response.json()
-                temp_token = second_payload.get("temp_token") or temp_token
+                response_payload = response.json()
+                temp_token = response_payload.get("temp_token")
+                if not temp_token:
+                    raise HTTPException(
+                        status_code=502,
+                        detail="Nubra did not return temp_token in the OTP step.",
+                    )
         except httpx.RequestError as exc:
             raise HTTPException(
                 status_code=502,

@@ -6,7 +6,7 @@ import queue
 import threading
 import time as _time
 from dataclasses import asdict, dataclass, field
-from datetime import UTC, datetime, time, timedelta
+from datetime import datetime, time, timedelta, timezone
 from itertools import islice
 from pathlib import Path
 from typing import Any, Callable, Iterable
@@ -47,6 +47,7 @@ from app.services.positioning.engines.vwap_engine import VwapEngine
 from app.services.instrument_service import instrument_service
 from app.services.market_history_service import HistoricalFetchRequest, market_history_service
 
+UTC = timezone.utc
 IST = ZoneInfo("Asia/Kolkata")
 MIN_BASELINE_SESSIONS = 3
 logger = logging.getLogger(__name__)
@@ -420,6 +421,45 @@ class VolumeBreakoutService:
         if self.has_active_consumers():
             return None
         return self.stop(reason="no active scanner consumers")
+
+    def inject_bootstrap_rows(self, rows: list[VolumeBreakoutStockRow]) -> int:
+        """Pre-seed partial_scan_rows with intraday bootstrap rows.
+
+        Only injects a symbol if it has no live-scanned row yet so that live
+        data always takes precedence.  Returns the count of symbols injected.
+        """
+        with self._lock:
+            runtime = self._runtime
+        if runtime is None:
+            return 0
+        today_pfx = datetime.now(IST).date().isoformat()
+        injected = 0
+        for row in rows:
+            if not row.candle_time_ist.startswith(today_pfx):
+                continue
+            if row.symbol not in runtime.partial_scan_rows:
+                runtime.partial_scan_rows[row.symbol] = row
+                injected += 1
+        if injected:
+            logger.info("volume_dashboard.bootstrap_injected count=%s", injected)
+        return injected
+
+    def get_universe_meta(self, limit: int = 100) -> list[dict[str, Any]]:
+        """Return the current universe rows (symbol + sector/industry) for the bootstrap service."""
+        with self._lock:
+            runtime = self._runtime
+        if runtime is None:
+            return []
+        return [
+            {
+                "symbol": str(r.get("symbol", "")).strip().upper(),
+                "display_name": str(r.get("display_name") or r.get("symbol", "")).strip().upper(),
+                "exchange": str(r.get("exchange", "NSE")).strip().upper(),
+                "sector": r.get("sector"),
+                "industry": r.get("industry"),
+            }
+            for r in runtime.universe_rows[:limit]
+        ]
 
     def default_positioning_request(
         self,
@@ -1346,7 +1386,27 @@ class VolumeBreakoutService:
         )
 
         runtime.last_breakout_keys = current_keys
-        runtime.partial_scan_rows = {item.symbol: item for item in live_rows}
+
+        # Merge new scan results instead of replacing the entire dict.
+        # This prevents the dashboard from flickering empty when the universe
+        # briefly changes or when some symbols are temporarily missing frames.
+        for item in live_rows:
+            runtime.partial_scan_rows[item.symbol] = item
+        # Prune symbols from stale sessions and symbols dropped from the universe.
+        if latest_session_date is not None:
+            session_pfx = latest_session_date.isoformat()
+            runtime.partial_scan_rows = {
+                sym: row
+                for sym, row in runtime.partial_scan_rows.items()
+                if row.candle_time_ist.startswith(session_pfx)
+            }
+        elif runtime.universe_rows:
+            active_syms = {str(r.get("symbol", "")).strip().upper() for r in runtime.universe_rows}
+            runtime.partial_scan_rows = {
+                sym: row for sym, row in runtime.partial_scan_rows.items()
+                if sym in active_syms
+            }
+
         runtime.market_breakouts = live_rows[: runtime.request.limit]
         runtime.recent_breakouts = fresh_rows[: runtime.request.limit]
         runtime.confirmed_breakouts = confirmed_rows[: runtime.request.limit]

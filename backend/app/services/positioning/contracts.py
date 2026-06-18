@@ -1,9 +1,12 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field
+
+
+UTC = timezone.utc
 
 
 Direction = Literal["bullish", "bearish", "neutral", "mixed"]
