@@ -245,7 +245,7 @@ export default function OptionsIntelligenceEngine({ sessionToken, deviceId, envi
         )}
 
         {activeTab === 'analytics' && (
-          <AnalyticsTab metrics={intelligence?.metrics || {}} spotPrice={intelligence?.spot_price} />
+          <AnalyticsTab metrics={intelligence?.metrics || {}} spotPrice={intelligence?.spot_price} chain={chain} />
         )}
 
         {activeTab === 'signals' && (

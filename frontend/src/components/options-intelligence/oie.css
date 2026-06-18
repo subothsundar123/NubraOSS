@@ -1458,3 +1458,111 @@
   flex-direction: column;
   gap: 8px;
 }
+
+/* ── OIE Chart Panels (shared by Intelligence + Analytics tabs) ─────────── */
+
+.oie-charts-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.oie-chart-panel {
+  background: var(--bg-2);
+  border: 1px solid var(--hairline);
+  border-radius: 8px;
+  padding: 14px 16px;
+  min-width: 0;
+}
+/* Cap all inline SVG charts so they don't balloon on wide screens */
+.oie-chart-panel svg,
+.intel-snapshot-gauge svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: 218px;
+  margin: 0 auto;
+}
+
+/* ── Intelligence tab: unified PCR + Key Levels snapshot card ──────────── */
+.intel-snapshot {
+  display: flex;
+  background: var(--bg-2);
+  border: 1px solid var(--hairline);
+  border-radius: 8px;
+  margin-bottom: 20px;
+  overflow: hidden;
+}
+.intel-snapshot-gauge {
+  flex: 0 0 55%;
+  padding: 14px 16px 10px;
+  border-right: 1px solid var(--hairline);
+}
+.intel-snapshot-levels {
+  flex: 1;
+  padding: 16px 22px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+.intel-kl-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--hairline);
+}
+.intel-kl-row:last-child { border-bottom: none; }
+.intel-kl-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--fg-dim);
+}
+.intel-kl-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.intel-kl-value {
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 720px) {
+  .intel-snapshot { flex-direction: column; }
+  .intel-snapshot-gauge { flex: none; border-right: none; border-bottom: 1px solid var(--hairline); }
+}
+
+.oie-chart-title {
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--fg-faint);
+  margin-bottom: 8px;
+}
+
+.oie-chart-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 80px;
+  font-size: 12px;
+  color: var(--fg-faint);
+}
+
+/* Analytics tab chart section (full-width, stacked) */
+.analytics-chart-section {
+  margin-bottom: 24px;
+}
+
+@media (max-width: 680px) {
+  .oie-charts-row {
+    grid-template-columns: 1fr;
+  }
+}

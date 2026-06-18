@@ -1,5 +1,6 @@
 import { useState, useMemo } from 'react'
 import type { OIEChainResponse, OIEChainStrikeRow, OIESignalResponse, OIEIntelligenceResponse } from './useOIEData'
+import { IVSkewChart } from './OIECharts'
 
 export interface TrackRequest {
   strike: number
@@ -275,7 +276,7 @@ const WINDOW = 15
 export default function ChainTab({ chain, spotPrice, onTrackPosition, signalReport, intelligence }: Props) {
   const [showAll, setShowAll] = useState(false)
   const [showGreeks, setShowGreeks] = useState(false)
-  const [showSignals, setShowSignals] = useState(false)
+  const [showSignals, setShowSignals] = useState(true)
   const [hoveredStrike, setHoveredStrike] = useState<number | null>(null)
 
   const direction = signalReport?.composite_direction ?? 'conflicted'
@@ -410,16 +411,25 @@ export default function ChainTab({ chain, spotPrice, onTrackPosition, signalRepo
         </div>
       )}
 
-      {/* GEX Profile */}
-      <div className="chain-gex-section">
-        <div className="chain-section-title">GEX Profile — Dealer Gamma Exposure per Strike</div>
-        <div className="chain-gex-chart">
-          <GexChart
-            strikes={gexStrikes}
-            spotPrice={spot}
-            callWall={agg.call_wall}
-            putWall={agg.put_wall}
-            gammaFlip={agg.gamma_flip_level}
+      {/* GEX Profile + IV Skew side by side */}
+      <div className="chain-gex-section" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+        <div>
+          <div className="chain-section-title">GEX Profile — Dealer Gamma Exposure per Strike</div>
+          <div className="chain-gex-chart">
+            <GexChart
+              strikes={gexStrikes}
+              spotPrice={spot}
+              callWall={agg.call_wall}
+              putWall={agg.put_wall}
+              gammaFlip={agg.gamma_flip_level}
+            />
+          </div>
+        </div>
+        <div>
+          <div className="chain-section-title">IV Skew — CE vs PE Implied Volatility</div>
+          <IVSkewChart
+            strikes={chain.strikes}
+            atm={chain.strikes.find(s => s.is_atm)?.strike_price ?? spot}
           />
         </div>
       </div>

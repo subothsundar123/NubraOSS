@@ -1,4 +1,5 @@
 import type { OIEIntelligenceResponse } from './useOIEData'
+import { PCRGauge } from './OIECharts'
 
 interface Props {
   data: OIEIntelligenceResponse
@@ -162,6 +163,37 @@ export default function IntelligenceTab({ data }: Props) {
         )}
       </div>
 
+      {/* PCR Gauge + Key Levels — unified card */}
+      <div className="intel-snapshot">
+        <div className="intel-snapshot-gauge">
+          <div className="oie-chart-title">Put–Call Ratio</div>
+          <PCRGauge pcr={metrics.pcr?.value ?? null} />
+        </div>
+        <div className="intel-snapshot-levels">
+          <div className="oie-chart-title">Key Levels</div>
+          {([
+            { label: 'Call Wall', v: kl.call_wall, color: '#EF4444' },
+            { label: 'Spot',      v: kl.spot,      color: 'rgba(255,255,255,.85)' },
+            { label: 'γ Flip',    v: kl.gamma_flip, color: '#6FD1D7' },
+            { label: 'Max Pain',  v: kl.max_pain,   color: '#F59E0B' },
+            { label: 'Put Wall',  v: kl.put_wall,   color: '#22C55E' },
+          ] as { label: string; v: number | null; color: string }[])
+            .filter(e => e.v != null)
+            .map(({ label, v, color }) => (
+              <div key={label} className="intel-kl-row">
+                <div className="intel-kl-label">
+                  <span className="intel-kl-dot" style={{ background: color }} />
+                  {label}
+                </div>
+                <div className="intel-kl-value" style={{ color }}>
+                  {v!.toLocaleString('en-IN')}
+                </div>
+              </div>
+            ))
+          }
+        </div>
+      </div>
+
       {/* Metric Cards */}
       <div className="intel-cards-grid">
         {cards.map((c) => (
@@ -172,48 +204,6 @@ export default function IntelligenceTab({ data }: Props) {
           </div>
         ))}
       </div>
-
-      {/* Key Levels Strip */}
-      {(kl.call_wall != null || kl.put_wall != null || kl.gamma_flip != null || kl.max_pain != null) && (
-        <div className="intel-key-levels">
-          {kl.call_wall != null && (
-            <div className="intel-level-item">
-              <div className="intel-level-label">Call Wall</div>
-              <div className="intel-level-value call">{kl.call_wall.toLocaleString('en-IN')}</div>
-            </div>
-          )}
-          {kl.call_wall != null && kl.put_wall != null && <div className="intel-level-sep" />}
-          {kl.put_wall != null && (
-            <div className="intel-level-item">
-              <div className="intel-level-label">Put Wall</div>
-              <div className="intel-level-value put">{kl.put_wall.toLocaleString('en-IN')}</div>
-            </div>
-          )}
-          {kl.put_wall != null && kl.gamma_flip != null && <div className="intel-level-sep" />}
-          {kl.gamma_flip != null && (
-            <div className="intel-level-item">
-              <div className="intel-level-label">Gamma Flip</div>
-              <div className="intel-level-value flip">{kl.gamma_flip.toLocaleString('en-IN')}</div>
-            </div>
-          )}
-          {kl.gamma_flip != null && kl.max_pain != null && <div className="intel-level-sep" />}
-          {kl.max_pain != null && (
-            <div className="intel-level-item">
-              <div className="intel-level-label">Max Pain</div>
-              <div className="intel-level-value pain">{kl.max_pain.toLocaleString('en-IN')}</div>
-            </div>
-          )}
-          {kl.spot != null && (
-            <>
-              <div className="intel-level-sep" />
-              <div className="intel-level-item">
-                <div className="intel-level-label">Spot</div>
-                <div className="intel-level-value neutral">{kl.spot.toLocaleString('en-IN')}</div>
-              </div>
-            </>
-          )}
-        </div>
-      )}
 
       {/* Interpretation Bullets */}
       {data.interpretation_bullets.length > 0 && (

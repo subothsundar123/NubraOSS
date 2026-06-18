@@ -10,6 +10,7 @@ import StrategyBuilder from './components/StrategyBuilder'
 import VolumeDashboard from './components/VolumeDashboard'
 import OptionsIntelligenceEngine from './components/options-intelligence/OptionsIntelligenceEngine'
 import EducationPage from './components/EducationPage'
+import UpdateBanner from './components/UpdateBanner'
 import { DATA_ENVIRONMENT } from './constants/environment'
 import { useAutomation } from './hooks/useAutomation'
 import type { AutomateConfig } from './hooks/useAutomation'
@@ -411,7 +412,7 @@ const demoSession: SuccessResponse = {
   refresh_token: 'demo-refresh-token',
   user_name: 'Demo User',
   account_id: 'NUBRA-DEMO',
-  device_id: 'Nubra-OSS-DEMO',
+  device_id: 'Nubra-OSS',
   environment: DATA_ENVIRONMENT,
   broker: 'Nubra',
   expires_in: 3600,
@@ -830,7 +831,7 @@ export default function App() {
     lots: '1',
     maxTrades: '10',
   })
-  const derivedDeviceId = session?.device_id ?? (phone ? `Nubra-OSS-${phone}` : 'Nubra-OSS-<phone>')
+  const derivedDeviceId = session?.device_id ?? 'Nubra-OSS'
 
   const [theme, setTheme] = useState<'dark'|'light'>('dark')
 
@@ -3639,6 +3640,7 @@ export default function App() {
     }
     return (
       <>
+      <UpdateBanner />
       {persistedPositioning}
       <div className="dash">
         {renderDashboardNav('Dashboard')}

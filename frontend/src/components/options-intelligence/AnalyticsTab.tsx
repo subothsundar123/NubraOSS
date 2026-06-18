@@ -1,8 +1,9 @@
-import type { MetricResult } from './useOIEData'
+import type { MetricResult, OIEChainResponse } from './useOIEData'
 
 interface Props {
   metrics: Record<string, MetricResult>
   spotPrice?: number | null
+  chain?: OIEChainResponse | null
 }
 
 const GROUPS: { key: string; title: string; metrics: string[] }[] = [

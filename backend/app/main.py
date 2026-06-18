@@ -1,7 +1,10 @@
 import asyncio
 from datetime import datetime, timedelta, timezone
 from typing import Any
+import os
 import queue as _queue
+import subprocess
+import sys
 
 from fastapi import Body, FastAPI, Header, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
@@ -154,6 +157,67 @@ def stop_positioning_orchestrator() -> None:
 @app.get("/health")
 def health() -> dict[str, str]:
     return {"status": "ok"}
+
+
+_GITHUB_API = "https://api.github.com/repos/socials-zanskar/NubraOSS/commits/main"
+
+
+@app.get("/api/version")
+def get_version() -> dict:
+    local_sha: str | None = None
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            capture_output=True, text=True, timeout=5,
+            cwd=os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+        )
+        if result.returncode == 0:
+            local_sha = result.stdout.strip()
+    except Exception:
+        pass
+
+    remote_sha: str | None = None
+    try:
+        resp = httpx.get(_GITHUB_API, timeout=8, headers={"Accept": "application/vnd.github+json"})
+        if resp.status_code == 200:
+            remote_sha = resp.json().get("sha")
+    except Exception:
+        pass
+
+    up_to_date = (local_sha is not None and remote_sha is not None and local_sha == remote_sha)
+    return {
+        "sha": local_sha,
+        "short": local_sha[:7] if local_sha else None,
+        "remote_sha": remote_sha,
+        "remote_short": remote_sha[:7] if remote_sha else None,
+        "up_to_date": up_to_date,
+    }
+
+
+@app.post("/api/update")
+def do_update() -> dict:
+    repo_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    try:
+        result = subprocess.run(
+            ["git", "pull", "origin", "main"],
+            capture_output=True, text=True, timeout=60,
+            cwd=repo_root,
+        )
+        if result.returncode == 0:
+            return {"success": True, "output": result.stdout.strip()}
+        return {"success": False, "error": result.stderr.strip() or result.stdout.strip()}
+    except Exception as exc:
+        return {"success": False, "error": str(exc)}
+
+
+@app.post("/api/restart")
+def do_restart() -> dict:
+    if sys.platform == "win32":
+        return {"success": False, "error": "Auto-restart is not supported on Windows. Please restart manually."}
+    try:
+        os.execv(sys.executable, [sys.executable] + sys.argv)
+    except Exception as exc:
+        return {"success": False, "error": str(exc)}
 
 
 @app.get("/api/system/public-ip")

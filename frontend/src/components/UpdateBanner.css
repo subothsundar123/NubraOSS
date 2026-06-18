@@ -1,0 +1,90 @@
+.update-banner {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 20px;
+  background: #1a2a1a;
+  border-bottom: 1px solid #2d4a2d;
+  font-size: 13px;
+  color: #d1fae5;
+}
+
+.update-banner-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #22c55e;
+  margin-right: 8px;
+  flex-shrink: 0;
+  animation: pulse-dot 1.8s ease-in-out infinite;
+}
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+.update-banner-text {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+}
+
+.update-banner-tag {
+  font-size: 11px;
+  font-family: monospace;
+  background: rgba(34, 197, 94, 0.15);
+  color: #4ade80;
+  border: 1px solid rgba(34, 197, 94, 0.3);
+  border-radius: 4px;
+  padding: 1px 6px;
+}
+
+.update-banner-error {
+  color: #fca5a5;
+}
+
+.update-banner-actions {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.update-banner-btn {
+  padding: 4px 14px;
+  border-radius: 5px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: background 0.15s;
+}
+
+.update-banner-btn.primary {
+  background: #16a34a;
+  color: #fff;
+  border-color: #15803d;
+}
+
+.update-banner-btn.primary:hover {
+  background: #15803d;
+}
+
+.update-banner-btn.ghost {
+  background: transparent;
+  color: #86efac;
+  border-color: rgba(134, 239, 172, 0.3);
+}
+
+.update-banner-btn.ghost:hover {
+  background: rgba(134, 239, 172, 0.08);
+}

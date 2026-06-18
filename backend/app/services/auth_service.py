@@ -141,7 +141,7 @@ class AuthService:
 
     def start_login(self, payload: StartLoginRequest) -> StartLoginResponse:
         base_url = self._get_base_url(payload.environment)
-        device_id = f"Nubra-OSS-{payload.phone}"
+        device_id = "Nubra-OSS"
         masked_phone = self._mask_phone(payload.phone)
 
         if payload.auth_method == "totp":
