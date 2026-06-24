@@ -6,9 +6,15 @@ import queue as _queue
 import subprocess
 import sys
 
-from fastapi import Body, FastAPI, Header, HTTPException, WebSocket, WebSocketDisconnect
+import logging as _logging
+
+from fastapi import Body, FastAPI, Header, HTTPException, Request, WebSocket, WebSocketDisconnect
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 import httpx
+
+_main_log = _logging.getLogger(__name__)
 
 from app.config import get_cors_origins, settings
 from app.schemas import (
@@ -144,6 +150,17 @@ app.add_middleware(
 )
 
 
+@app.exception_handler(RequestValidationError)
+async def validation_error_handler(request: Request, exc: RequestValidationError) -> JSONResponse:
+    _main_log.warning(
+        "422 RequestValidationError on %s %s: %s",
+        request.method,
+        request.url.path,
+        exc.errors(),
+    )
+    return JSONResponse(status_code=422, content={"detail": exc.errors()})
+
+
 @app.on_event("startup")
 def start_positioning_orchestrator() -> None:
     positioning_orchestrator.start()
@@ -214,10 +231,16 @@ def do_update() -> dict:
 def do_restart() -> dict:
     if sys.platform == "win32":
         return {"success": False, "error": "Auto-restart is not supported on Windows. Please restart manually."}
-    try:
+
+    import threading
+
+    def _restart() -> None:
+        import time as _time
+        _time.sleep(1.5)  # ensure HTTP response is delivered first
         os.execv(sys.executable, [sys.executable] + sys.argv)
-    except Exception as exc:
-        return {"success": False, "error": str(exc)}
+
+    threading.Thread(target=_restart, daemon=True).start()
+    return {"success": True}
 
 
 @app.get("/api/system/public-ip")

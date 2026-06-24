@@ -81,10 +81,13 @@ class OptionContract:
 
 class ScalperService:
     _UL_CACHE_TTL = 15.0
+    _OPT_CACHE_TTL = 30.0
 
     def __init__(self) -> None:
         self._ul_cache: dict[str, tuple[float, object]] = {}
         self._ul_cache_lock = threading.Lock()
+        self._opt_cache: dict[str, tuple[float, object]] = {}
+        self._opt_cache_lock = threading.Lock()
         self._log = log
 
     def _coerce_float(self, value: object) -> float | None:
@@ -224,6 +227,108 @@ class ScalperService:
                 self._ul_cache[cache_key] = (time.monotonic() + self._UL_CACHE_TTL, frame)
         return frame
 
+    def _fetch_option_panels_cached(
+        self,
+        *,
+        request: ScalperSnapshotRequest,
+        call_symbol: str,
+        put_symbol: str,
+    ) -> tuple["ScalperChartPanel", "ScalperChartPanel"]:
+        """Fetch CE + PE candle frames with per-symbol TTL caching.
+
+        When the user only changes one strike, the unchanged option is served
+        from cache instantly and only the new strike triggers a Nubra API call.
+        Both are batch-fetched together when both are cold.
+        """
+        now = time.monotonic()
+
+        def _opt_key(sym: str) -> str:
+            return f"{request.environment}:{request.exchange}:{request.interval}:{sym.upper()}"
+
+        with self._opt_cache_lock:
+            ce_entry = self._opt_cache.get(_opt_key(call_symbol))
+            pe_entry = self._opt_cache.get(_opt_key(put_symbol))
+            call_frame = ce_entry[1] if ce_entry and now < ce_entry[0] else None
+            put_frame = pe_entry[1] if pe_entry and now < pe_entry[0] else None
+
+        symbols_to_fetch = tuple(
+            sym for sym, frame in ((call_symbol, call_frame), (put_symbol, put_frame))
+            if frame is None
+        )
+
+        if symbols_to_fetch:
+            self._log.debug("Option cache MISS for %s — fetching from Nubra", symbols_to_fetch)
+            lookback_span = timedelta(days=max(request.lookback_days + 2, 7))
+            end_dt = self._last_trading_close(datetime.now(IST))
+            fresh: dict = {}
+            for _ in range(3):
+                start_dt = end_dt - lookback_span
+                frames = market_history_service.fetch(
+                    HistoricalFetchRequest(
+                        session_token=request.session_token,
+                        device_id=request.device_id,
+                        environment=request.environment,
+                        exchange=request.exchange,
+                        instrument_type="OPT",
+                        interval=request.interval,
+                        symbols=symbols_to_fetch,
+                        start_dt=start_dt,
+                        end_dt=end_dt,
+                    )
+                )
+                for sym in symbols_to_fetch:
+                    existing = fresh.get(sym)
+                    if existing is None or existing.empty:
+                        candidate = frames.get(sym.upper())
+                        if candidate is not None and not candidate.empty:
+                            fresh[sym] = candidate
+                if all(fresh.get(s) is not None and not fresh[s].empty for s in symbols_to_fetch):
+                    break
+                end_dt = self._last_trading_close(end_dt - timedelta(days=1))
+
+            new_exp = time.monotonic() + self._OPT_CACHE_TTL
+            with self._opt_cache_lock:
+                for sym, frame in fresh.items():
+                    if frame is not None and not frame.empty:
+                        self._opt_cache[_opt_key(sym)] = (new_exp, frame)
+
+            if call_frame is None:
+                call_frame = fresh.get(call_symbol)
+            if put_frame is None:
+                put_frame = fresh.get(put_symbol)
+        else:
+            self._log.debug("Option cache HIT for %s / %s", call_symbol, put_symbol)
+
+        if call_frame is None or call_frame.empty:
+            raise HTTPException(status_code=404, detail=f"No chart data for {call_symbol}.")
+        if put_frame is None or put_frame.empty:
+            raise HTTPException(status_code=404, detail=f"No chart data for {put_symbol}.")
+
+        def _frame_to_panel(frame, symbol):
+            candles = [
+                ScalperCandle(
+                    time_ist=ts.strftime("%d %b %H:%M"),
+                    epoch_ms=int(ts.timestamp() * 1000),
+                    open=float(r["open"]),
+                    high=float(r["high"]),
+                    low=float(r["low"]),
+                    close=float(r["close"]),
+                    volume=float(r["bucket_volume"]) if r.get("bucket_volume") is not None else None,
+                )
+                for ts, r in frame.tail(150).iterrows()
+            ]
+            return ScalperChartPanel(
+                instrument=symbol,
+                display_name=symbol,
+                exchange=request.exchange,
+                instrument_type="OPT",
+                interval=request.interval,
+                last_price=candles[-1].close if candles else None,
+                candles=candles,
+            )
+
+        return _frame_to_panel(call_frame, call_symbol), _frame_to_panel(put_frame, put_symbol)
+
     def _session_baseline_metrics(self, frame, *, lookback_days: int) -> tuple[float | None, float | None, float | None]:
         if frame is None or frame.empty:
             return None, None, None
@@ -327,10 +432,12 @@ class ScalperService:
             alias.strip().upper()
             for alias in INDEX_HISTORY_SYMBOL_ALIASES.get(underlying, (underlying,))
         )
+        # NSE index options trade on the NFO segment; accept both exchange codes.
+        valid_exchanges = {request.exchange, "NFO"} if request.exchange == "NSE" else {request.exchange}
         option_rows: list[dict] = []
         for row in rows:
             exchange = str(row.get("exchange") or "").strip().upper()
-            if exchange != request.exchange:
+            if exchange not in valid_exchanges:
                 continue
             derivative_type = str(row.get("derivative_type") or "").strip().upper()
             option_type = str(row.get("option_type") or "").strip().upper()
@@ -341,7 +448,97 @@ class ScalperService:
             if asset != underlying and not any(stock_name.startswith(alias) for alias in underlying_aliases):
                 continue
             option_rows.append(row)
+
+        # If refdata yielded nothing (e.g. V3 API changed field names), fall back to the
+        # option chain snapshot which is already working and contains strike/display_name data.
+        if not option_rows:
+            option_rows = self._iter_option_rows_from_chain(request, underlying, underlying_aliases)
+
         return option_rows
+
+    def _iter_option_rows_from_chain(
+        self,
+        request: ScalperSnapshotRequest,
+        underlying: str,
+        underlying_aliases: tuple[str, ...],
+    ) -> list[dict]:
+        """Fallback: extract option rows from the live option chain snapshot."""
+        delta_req = DeltaNeutralPairsRequest(
+            session_token=request.session_token,
+            device_id=request.device_id,
+            environment=request.environment,
+            underlying=underlying,
+            exchange=request.exchange,
+            expiry=request.expiry,
+            limit=5,
+        )
+        payload = self._get_option_chain_snapshot(delta_req)
+        if not payload:
+            return []
+
+        # Unwrap broker envelope (same logic as option_chain_for_positioning)
+        inner = payload
+        for envelope_key in ("data", "chain", "optionchain", "optionChain", "chainData", "result", "response"):
+            candidate = payload.get(envelope_key)
+            if isinstance(candidate, dict) and (candidate.get("ce") or candidate.get("CE") or candidate.get("calls")):
+                inner = candidate
+                break
+
+        expiry_raw = str(inner.get("expiry") or payload.get("expiry") or "").strip()
+
+        def _chain_to_rows(chain_rows: list, opt_type: str) -> list[dict]:
+            result = []
+            for row in chain_rows:
+                if not isinstance(row, dict):
+                    continue
+                strike = self._normalize_row_strike(
+                    row.get("sp") if row.get("sp") is not None else row.get("strike_price")
+                )
+                if strike is None:
+                    continue
+                display_name = str(
+                    row.get("display_name") or row.get("symbol") or row.get("stock_name") or ""
+                ).strip().upper()
+                if not display_name:
+                    display_name = f"{underlying}{strike}{opt_type}"
+                ref_id = instrument_service._coerce_positive_int(  # noqa: SLF001
+                    row.get("ref_id") or row.get("refId") or row.get("token")
+                )
+                lot_size = instrument_service._coerce_positive_int(row.get("ls") or row.get("lot_size"))  # noqa: SLF001
+                tick_size = instrument_service._coerce_positive_int(row.get("ts") or row.get("tick_size"))  # noqa: SLF001
+                result.append({
+                    "exchange": request.exchange,
+                    "derivative_type": "OPT",
+                    "option_type": opt_type,
+                    "asset": underlying,
+                    "stock_name": display_name,
+                    "display_name": display_name,
+                    "symbol": display_name,
+                    "sp": strike,
+                    "strike_price": strike,
+                    "ref_id": ref_id,
+                    "ls": lot_size,
+                    "lot_size": lot_size,
+                    "ts": tick_size,
+                    "tick_size": tick_size,
+                    "expiry": expiry_raw or None,
+                    "display_expiry": expiry_raw or None,
+                })
+            return result
+
+        ce_raw = inner.get("ce") or inner.get("CE") or inner.get("calls") or []
+        pe_raw = inner.get("pe") or inner.get("PE") or inner.get("puts") or []
+        rows: list[dict] = []
+        if isinstance(ce_raw, list):
+            rows.extend(_chain_to_rows(ce_raw, "CE"))
+        if isinstance(pe_raw, list):
+            rows.extend(_chain_to_rows(pe_raw, "PE"))
+        self._log.warning(
+            "_iter_option_rows_from_chain %s: ce=%d pe=%d (refdata was empty)",
+            underlying, len([r for r in rows if r["option_type"] == "CE"]),
+            len([r for r in rows if r["option_type"] == "PE"]),
+        )
+        return rows
 
     def _get_scalper_snapshot_spot(self, request: ScalperSnapshotRequest) -> float | None:
         return self._get_underlying_spot(
@@ -393,7 +590,8 @@ class ScalperService:
         target_expiry = self._normalize_expiry_request(expiry)
         normalized_rows: list[OptionContract] = []
         for row in option_rows:
-            strike = self._normalize_row_strike(row.get("strike_price"))
+            # V3 uses abbreviated field names: sp=strike_price, ls=lot_size, ts=tick_size
+            strike = self._normalize_row_strike(row.get("sp") if row.get("sp") is not None else row.get("strike_price"))
             display_name = str(row.get("display_name") or row.get("symbol") or row.get("stock_name") or "").strip().upper()
             if strike is None or not display_name:
                 continue
@@ -404,8 +602,8 @@ class ScalperService:
                     option_type=str(row.get("option_type") or "").strip().upper(),
                     strike_price=strike,
                     expiry_label=self._normalize_expiry_label(row),
-                    lot_size=instrument_service._coerce_positive_int(row.get("lot_size")),  # noqa: SLF001
-                    tick_size=instrument_service._coerce_positive_int(row.get("tick_size")),  # noqa: SLF001
+                    lot_size=instrument_service._coerce_positive_int(row.get("ls") if row.get("ls") is not None else row.get("lot_size")),  # noqa: SLF001
+                    tick_size=instrument_service._coerce_positive_int(row.get("ts") if row.get("ts") is not None else row.get("tick_size")),  # noqa: SLF001
                 )
             )
 
@@ -537,6 +735,8 @@ class ScalperService:
             "Content-Type": "application/json",
             "Accept": "application/json",
             "x-device-id": device_id,
+            "x-app-version": "0.4.5",
+            "Cookie": f"deviceId={device_id}",
         }
 
     def _compute_aggressive_limit_price(self, order_side: str, ltp_price: float | None, tick_size: int | None) -> int:
@@ -943,23 +1143,27 @@ class ScalperService:
         order_price: int,
         tag: str,
     ) -> dict[str, object]:
-        # Broker only accepts CNC and IDAY — NRML (carry-overnight for F&O) maps to CNC.
-        broker_delivery_type = (
+        # NRML (carry-overnight for F&O) maps to CNC in V3
+        _raw_delivery = (
             "ORDER_DELIVERY_TYPE_CNC"
             if order_delivery_type == "ORDER_DELIVERY_TYPE_NRML"
             else order_delivery_type
         )
+        _side_v3 = "BUY" if order_side in ("ORDER_SIDE_BUY", "BUY") else "SELL"
+        _delivery_v3 = "CNC" if _raw_delivery in ("ORDER_DELIVERY_TYPE_CNC", "CNC") else "IDAY"
         return {
-            "ref_id": instrument_ref_id,
-            "order_type": "ORDER_TYPE_REGULAR",
-            "order_qty": order_qty,
-            "order_side": order_side,
-            "order_delivery_type": broker_delivery_type,
-            "validity_type": "IOC",
-            "price_type": "LIMIT",
-            "order_price": order_price,
-            "tag": tag,
-            "algo_params": {},
+            "orders": [{
+                "refId": instrument_ref_id,
+                "qty": order_qty,
+                "side": _side_v3,
+                "deliveryType": _delivery_v3,
+                "validityType": "IOC",
+                "priceType": "LIMIT",
+                "isMultiLeg": False,
+                "executionMode": "ENTRY",
+                "entryPrice": order_price,
+                "stratTags": [tag],
+            }]
         }
 
     def _submit_single_order(
@@ -971,7 +1175,7 @@ class ScalperService:
         payload: dict[str, object],
     ) -> dict:
         base_url = self._get_base_url(environment)
-        url = f"{base_url}/orders/v2/single"
+        url = f"{base_url}/sentinel/orders/create"
         self._log.warning("_submit_single_order url=%s payload=%s", url, payload)
         try:
             with httpx.Client(timeout=20.0) as client:
@@ -994,7 +1198,19 @@ class ScalperService:
             raise HTTPException(status_code=502, detail=f"Order placement failed: {exc}") from exc
         if not isinstance(order, dict):
             raise HTTPException(status_code=502, detail="Order placement returned an invalid response.")
-        return order
+        # V3 wraps response in orders[] — extract first item and add legacy field aliases
+        order_item = order
+        if isinstance(order.get("orders"), list) and order["orders"]:
+            order_item = dict(order["orders"][0])
+        if "intentOrderId" in order_item and "order_id" not in order_item:
+            order_item["order_id"] = order_item["intentOrderId"]
+        if "status" in order_item and "order_status" not in order_item:
+            order_item["order_status"] = order_item["status"]
+        if "orderPrice" in order_item and "order_price" not in order_item:
+            order_item["order_price"] = order_item["orderPrice"]
+        if "filledQty" in order_item and "filled_qty" not in order_item:
+            order_item["filled_qty"] = order_item["filledQty"]
+        return order_item
 
     def preview_stock_order(self, request: ScannerOrderPreviewRequest) -> ScannerOrderPreviewResponse:
         if request.ltp_price is None or request.ltp_price <= 0:
@@ -1413,7 +1629,7 @@ class ScalperService:
             instrument_type=underlying_type,
             frame=underlying_frame,
         )
-        call_panel, put_panel = self._build_option_panels_batched(
+        call_panel, put_panel = self._fetch_option_panels_cached(
             request=request,
             call_symbol=call_contract.display_name,
             put_symbol=put_contract.display_name,
@@ -2078,7 +2294,7 @@ class ScalperService:
         try:
             with httpx.Client(timeout=20.0) as client:
                 response = client.get(
-                    f"{base_url}/portfolio/positions",
+                    f"{base_url}/sentinel/portfolio/positions",
                     headers=self._request_headers(request.session_token, request.device_id),
                 )
                 if response.status_code == 404:
@@ -2168,7 +2384,7 @@ class ScalperService:
         try:
             with httpx.Client(timeout=20.0) as client:
                 response = client.get(
-                    f"{base_url}/orders/v2",
+                    f"{base_url}/sentinel/orders",
                     headers=self._request_headers(request.session_token, request.device_id),
                 )
                 if response.status_code == 404:
@@ -2181,29 +2397,36 @@ class ScalperService:
         except Exception as exc:
             raise HTTPException(status_code=502, detail=f"Failed to fetch orders: {exc}") from exc
 
-        orders_list = raw if isinstance(raw, list) else (raw.get("orders") or [] if isinstance(raw, dict) else [])
+        orders_raw = raw if isinstance(raw, list) else (raw.get("orders") if isinstance(raw, dict) else [])
+        if isinstance(orders_raw, dict):
+            orders_list = [o for bucket in orders_raw.values() if isinstance(bucket, list) for o in bucket]
+        elif isinstance(orders_raw, list):
+            orders_list = orders_raw
+        else:
+            orders_list = []
         orders: list[PositioningOrderItem] = []
         for o in orders_list:
             if not isinstance(o, dict):
                 continue
-            tag = str(o.get("tag") or "")
+            strat_tags = o.get("stratTags") or []
+            tag = str(o.get("tag") or (strat_tags[0] if strat_tags else "") or "")
             if not tag.startswith("nubraoss_options_"):
                 continue
-            order_id = instrument_service._coerce_positive_int(o.get("order_id"))  # noqa: SLF001
-            ref_id = instrument_service._coerce_positive_int(o.get("ref_id"))  # noqa: SLF001
+            order_id = instrument_service._coerce_positive_int(o.get("intentOrderId") or o.get("order_id"))  # noqa: SLF001
+            ref_id = instrument_service._coerce_positive_int(o.get("refId") or o.get("ref_id"))  # noqa: SLF001
             if order_id is None or ref_id is None:
                 continue
-            price_raw = self._coerce_float(o.get("order_price") or 0)
+            price_raw = self._coerce_float(o.get("orderPrice") or o.get("order_price") or 0)
             price_rupees = round((price_raw or 0) / 100.0, 2) if (price_raw or 0) > 100 else (price_raw or 0)
             orders.append(PositioningOrderItem(
                 order_id=order_id,
                 ref_id=ref_id,
-                display_name=str(o.get("display_name") or ""),
-                order_side=str(o.get("order_side") or ""),
-                order_status=str(o.get("order_status") or ""),
+                display_name=str(o.get("display_name") or o.get("symbol") or ""),
+                order_side=str(o.get("side") or o.get("order_side") or ""),
+                order_status=str(o.get("status") or o.get("order_status") or ""),
                 order_price=price_rupees,
-                order_qty=int(self._coerce_float(o.get("order_qty")) or 0),
-                order_delivery_type=str(o.get("order_delivery_type") or ""),
+                order_qty=int(self._coerce_float(o.get("qty") or o.get("order_qty")) or 0),
+                order_delivery_type=str(o.get("deliveryType") or o.get("order_delivery_type") or ""),
                 tag=tag or None,
                 order_time=int(o["order_time"]) if o.get("order_time") else None,
             ))

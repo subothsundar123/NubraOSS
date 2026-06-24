@@ -811,6 +811,7 @@ export default function App() {
   const [scalperSnapshot, setScalperSnapshot] = useState<ScalperSnapshotResponse | null>(null)
   const [scalperSnapshotError, setScalperSnapshotError] = useState('')
   const [scalperSnapshotNotice, setScalperSnapshotNotice] = useState('')
+  const [scalperSnapshotRetry, setScalperSnapshotRetry] = useState(0)
   const [activeScalperTool, setActiveScalperTool] = useState<ScalperTool>('delta-neutral')
   const [deltaNeutralPairs, setDeltaNeutralPairs] = useState<DeltaNeutralPairRow[]>([])
   const [deltaNeutralMessage, setDeltaNeutralMessage] = useState('')
@@ -2020,9 +2021,16 @@ export default function App() {
       }
     }
 
-    void loadScalperSnapshot()
+    // Debounce: wait 350ms after the last strike/param change before hitting the API.
+    // Cached data (shown above) still renders immediately; only the network call is delayed.
+    const debounce = window.setTimeout(() => {
+      void loadScalperSnapshot()
+    }, 350)
 
-    return () => controller.abort()
+    return () => {
+      window.clearTimeout(debounce)
+      controller.abort()
+    }
   }, [
     view,
     session,
@@ -2034,6 +2042,7 @@ export default function App() {
     parsedScalperCeStrike,
     parsedScalperPeStrike,
     normalizedScalperExpiry,
+    scalperSnapshotRetry,
   ])
 
   useEffect(() => {
@@ -3006,7 +3015,18 @@ export default function App() {
             </div>
           ) : (
             <>
-              {scalperSnapshotError && !liveConnected ? <div className="err-banner">{scalperSnapshotError}</div> : null}
+              {scalperSnapshotError && !liveConnected ? (
+                <div className="err-banner" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ flex: 1 }}>{scalperSnapshotError}</span>
+                  <button
+                    className="btn-sm"
+                    onClick={() => setScalperSnapshotRetry((n) => n + 1)}
+                    style={{ flexShrink: 0 }}
+                  >
+                    Retry
+                  </button>
+                </div>
+              ) : null}
               {scalperSnapshotNotice && !liveConnected ? <div className="msg-banner">{scalperSnapshotNotice}</div> : null}
 
               <section className="scalper-terminal">
