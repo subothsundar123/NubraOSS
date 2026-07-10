@@ -62,6 +62,8 @@ class TradingViewWebhookService:
             "Content-Type": "application/json",
             "Accept": "application/json",
             "x-device-id": device_id,
+            "x-app-version": "0.4.5",
+            "Cookie": f"deviceId={device_id}",
         }
 
     def _extract_error(self, response: httpx.Response) -> str:
@@ -648,24 +650,26 @@ class TradingViewWebhookService:
         )
         if price_type == "LIMIT" and order_price is None:
             order_price = self._compute_aggressive_limit_price(tick_size, order_side, ltp_paise)
-        payload = {
-            "ref_id": ref_id,
-            "exchange": exchange,
-            "order_type": "ORDER_TYPE_REGULAR",
-            "order_qty": normalized_qty,
-            "order_side": order_side,
-            "order_delivery_type": order_delivery_type,
-            "validity_type": validity_type,
-            "price_type": price_type,
-            "tag": f"tv_{strategy_name.lower().replace(' ', '_')}_{symbol.lower()}",
-            "algo_params": {},
+        _side_v3 = "BUY" if order_side in ("ORDER_SIDE_BUY", "BUY") else "SELL"
+        _delivery_v3 = "CNC" if order_delivery_type in ("ORDER_DELIVERY_TYPE_CNC", "CNC") else "IDAY"
+        _order_item: dict[str, Any] = {
+            "refId": ref_id,
+            "qty": normalized_qty,
+            "side": _side_v3,
+            "deliveryType": _delivery_v3,
+            "validityType": validity_type,
+            "priceType": price_type,
+            "isMultiLeg": False,
+            "executionMode": "ENTRY",
+            "stratTags": [f"tv_{strategy_name.lower().replace(' ', '_')}_{symbol.lower()}"],
         }
         if order_price is not None:
-            payload["order_price"] = order_price
+            _order_item["entryPrice"] = order_price
+        payload = {"orders": [_order_item]}
         base_url = self._base_url(environment)
         with httpx.Client(timeout=20.0) as client:
             response = client.post(
-                f"{base_url}/orders/v2/single",
+                f"{base_url}/sentinel/orders/create",
                 json=payload,
                 headers=self._request_headers(session_token, device_id),
             )
@@ -690,17 +694,23 @@ class TradingViewWebhookService:
         session_token: str,
         device_id: str,
         environment: str,
-        order_id: int,
+        intent_order_id: int,
     ) -> dict[str, Any] | None:
         base_url = self._base_url(environment)
         with httpx.Client(timeout=10.0) as client:
             response = client.get(
-                f"{base_url}/orders/v2/{order_id}",
+                f"{base_url}/sentinel/orders",
                 headers=self._request_headers(session_token, device_id),
             )
             if response.status_code >= 400:
                 return None
-            return response.json()
+            payload = response.json()
+        for bucket in (payload.get("orders") or {}).values():
+            if isinstance(bucket, list):
+                for item in bucket:
+                    if item.get("intentOrderId") == intent_order_id:
+                        return item
+        return None
 
     def execute(self, body: dict[str, Any], header_secret: str | None = None, source: str = "live") -> TradingViewWebhookExecuteResponse:
         with self._lock:

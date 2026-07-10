@@ -459,6 +459,8 @@ def _request_headers(session_token: str, device_id: str) -> dict[str, str]:
         "Content-Type": "application/json",
         "Accept": "application/json",
         "x-device-id": device_id,
+        "x-app-version": "0.4.5",
+        "Cookie": f"deviceId={device_id}",
     }
 
 

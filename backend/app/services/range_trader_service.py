@@ -709,6 +709,8 @@ class RangeTraderService:
             "Content-Type": "application/json",
             "Accept": "application/json",
             "x-device-id": device_id,
+            "x-app-version": "0.4.5",
+            "Cookie": f"deviceId={device_id}",
         }
 
     def _get_ltp_price(self, session_token: str, device_id: str, environment: str, ref_id: int) -> float:
@@ -747,16 +749,17 @@ class RangeTraderService:
         if lot_size > 1 and order_qty % lot_size != 0:
             order_qty += lot_size - (order_qty % lot_size)
         price_type = "MARKET" if order_type == "MARKET" else "LIMIT"
-        payload: dict[str, object] = {
-            "ref_id": ref_id,
-            "order_type": "ORDER_TYPE_REGULAR",
-            "order_qty": order_qty,
-            "order_side": order_side,
-            "order_delivery_type": "ORDER_DELIVERY_TYPE_IDAY",
-            "validity_type": "IOC",
-            "price_type": price_type,
-            "tag": tag,
-            "algo_params": {},
+        _side_v3 = "BUY" if order_side in ("ORDER_SIDE_BUY", "BUY") else "SELL"
+        _order_item: dict[str, object] = {
+            "refId": ref_id,
+            "qty": order_qty,
+            "side": _side_v3,
+            "deliveryType": "IDAY",
+            "validityType": "IOC",
+            "priceType": price_type,
+            "isMultiLeg": False,
+            "executionMode": "ENTRY",
+            "stratTags": [tag],
         }
         order_price = None
         if price_type == "LIMIT":
@@ -766,8 +769,9 @@ class RangeTraderService:
                 order_price = self._round_limit_price(order_side, limit_price, tick_size)
             else:
                 order_price = self._aggressive_limit_price(order_side, ltp_price, tick_size)
-            payload["order_price"] = order_price
-        url = f"{self._base_url(environment)}/orders/v2/single"
+            _order_item["entryPrice"] = order_price
+        payload = {"orders": [_order_item]}
+        url = f"{self._base_url(environment)}/sentinel/orders/create"
         _log.warning(
             "range_trader submit_order environment=%s exchange=%s url=%s payload=%s",
             environment,
@@ -792,7 +796,9 @@ class RangeTraderService:
             order_price_paise=order_price,
             ltp_price=ltp_price,
         )
-        order_id = instrument_service._coerce_positive_int(order.get("order_id")) or initial.get("order_id")  # noqa: SLF001
+        order_id = instrument_service._coerce_positive_int(  # noqa: SLF001
+            (order.get("orders") or [{}])[0].get("intentOrderId") or order.get("order_id")
+        ) or initial.get("order_id")
         snapshot = self._wait_for_order_snapshot(session_token, device_id, environment, order_id) if order_id is not None else None
         normalized = normalize_order_result(
             order,
@@ -808,13 +814,22 @@ class RangeTraderService:
     def _fetch_order_snapshot(self, session_token: str, device_id: str, environment: str, order_id: int) -> dict | None:
         with httpx.Client(timeout=10.0) as client:
             response = client.get(
-                f"{self._base_url(environment)}/orders/v2/{order_id}",
+                f"{self._base_url(environment)}/sentinel/orders",
                 headers=self._request_headers(session_token, device_id),
             )
             if response.status_code >= 400:
                 return None
             payload = response.json()
-        return payload if isinstance(payload, dict) else None
+        if not isinstance(payload, dict):
+            return None
+        for bucket in (payload.get("orders") or {}).values():
+            if isinstance(bucket, list):
+                for item in bucket:
+                    if isinstance(item, dict) and (
+                        item.get("intentOrderId") == order_id or item.get("order_id") == order_id
+                    ):
+                        return item
+        return None
 
     def _wait_for_order_snapshot(self, session_token: str, device_id: str, environment: str, order_id: int) -> dict | None:
         snapshot = None

@@ -1379,3 +1379,21 @@ class PositioningExitResponse(BaseModel):
     message: str
     order_id: int | None
     order_status: str | None
+
+
+class SmcSnapshotRequest(BaseModel):
+    session_token: str = Field(min_length=10)
+    device_id: str = Field(min_length=3, max_length=128)
+    environment: Environment
+    symbol: str = Field(default="NIFTY", min_length=1, max_length=32)
+    exchange: str = Field(default="NSE", min_length=1, max_length=10)
+    interval: str = Field(default="5", min_length=1, max_length=5)
+
+
+class SmcScanRequest(BaseModel):
+    session_token: str = Field(min_length=10)
+    device_id: str = Field(min_length=3, max_length=128)
+    environment: Environment
+    symbols: list[str] = Field(default_factory=lambda: ["NIFTY", "BANKNIFTY", "FINNIFTY"])
+    exchange: str = Field(default="NSE", min_length=1, max_length=10)
+    interval: str = Field(default="5", min_length=1, max_length=5)

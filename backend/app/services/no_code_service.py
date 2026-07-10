@@ -246,6 +246,8 @@ class NoCodeService:
                     "Content-Type": "application/json",
                     "Accept": "application/json",
                     "x-device-id": runtime.request.device_id,
+                    "x-app-version": "0.4.5",
+                    "Cookie": f"deviceId={runtime.request.device_id}",
                 },
             )
             if response.status_code >= 400:
@@ -314,6 +316,8 @@ class NoCodeService:
             "Content-Type": "application/json",
             "Accept": "application/json",
             "x-device-id": runtime.request.device_id,
+            "x-app-version": "0.4.5",
+            "Cookie": f"deviceId={runtime.request.device_id}",
         }
 
     def _coerce_positive_int(self, value: object, fallback: int | None = None) -> int | None:
@@ -352,7 +356,7 @@ class NoCodeService:
 
         base_url = self._get_base_url(runtime.request.environment)
         with httpx.Client(timeout=20.0) as client:
-            response = client.get(f"{base_url}/portfolio/positions", headers=self._request_headers(runtime))
+            response = client.get(f"{base_url}/sentinel/portfolio/positions", headers=self._request_headers(runtime))
             if response.status_code >= 400:
                 raise HTTPException(status_code=response.status_code, detail=self._extract_error(response))
             payload = response.json()
@@ -422,21 +426,26 @@ class NoCodeService:
         ltp_paise = self._get_current_price_paise(runtime)
         order_price = self._compute_aggressive_limit_price(execution, side, ltp_paise)
         normalized_qty = self._normalize_order_qty(execution, qty)
+        _side_v3 = "BUY" if side in ("ORDER_SIDE_BUY", "BUY") else "SELL"
+        _raw_delivery = runtime.request.order_delivery_type
+        _delivery_v3 = "CNC" if _raw_delivery in ("ORDER_DELIVERY_TYPE_CNC", "CNC") else "IDAY"
         payload = {
-            "ref_id": execution.instrument_ref_id,
-            "order_type": "ORDER_TYPE_REGULAR",
-            "order_qty": normalized_qty,
-            "order_side": side,
-            "order_delivery_type": runtime.request.order_delivery_type,
-            "validity_type": "IOC",
-            "price_type": "LIMIT",
-            "order_price": order_price,
-            "tag": f"nubraoss_{runtime.request.instrument.lower()}_{action}",
-            "algo_params": {},
+            "orders": [{
+                "refId": execution.instrument_ref_id,
+                "qty": normalized_qty,
+                "side": _side_v3,
+                "deliveryType": _delivery_v3,
+                "validityType": "IOC",
+                "priceType": "LIMIT",
+                "isMultiLeg": False,
+                "executionMode": "ENTRY",
+                "entryPrice": order_price,
+                "stratTags": [f"nubraoss_{runtime.request.instrument.lower()}_{action}"],
+            }]
         }
         with httpx.Client(timeout=20.0) as client:
             response = client.post(
-                f"{base_url}/orders/v2/single",
+                f"{base_url}/sentinel/orders/create",
                 json=payload,
                 headers=self._request_headers(runtime),
             )
@@ -444,22 +453,23 @@ class NoCodeService:
                 raise HTTPException(status_code=response.status_code, detail=self._extract_error(response))
             order = response.json()
 
-        execution.pending_order_id = int(order.get("order_id", 0) or 0) or None
+        order_item = (order.get("orders") or [{}])[0]
+        execution.pending_order_id = int(order_item.get("intentOrderId", 0) or 0) or None
         execution.pending_order_side = side
         execution.pending_order_action = action
-        execution.last_order_status = order.get("order_status")
+        execution.last_order_status = order_item.get("status")
         execution.last_order_update = {
             "order_id": execution.pending_order_id,
-            "order_status": order.get("order_status"),
-            "order_side": order.get("order_side"),
+            "order_status": order_item.get("status"),
+            "order_side": side,
             "ltp_price": ltp_paise,
             "tick_size": execution.instrument_tick_size,
             "lot_size": execution.instrument_lot_size,
             "requested_qty": qty,
             "order_qty": normalized_qty,
-            "order_price": int(order.get("order_price", order_price) or order_price),
-            "filled_qty": int(order.get("filled_qty", 0) or 0),
-            "avg_filled_price": float(order.get("avg_filled_price", 0) or 0),
+            "order_price": int(order_item.get("orderPrice", order_price) or order_price),
+            "filled_qty": int(order_item.get("filledQty", 0) or 0),
+            "avg_filled_price": float(order_item.get("filledPrice", 0) or 0),
         }
 
     def _cancel_pending_order(self, runtime: NoCodeRuntime, reason: str) -> None:
@@ -470,8 +480,9 @@ class NoCodeService:
         base_url = self._get_base_url(runtime.request.environment)
         order_id = execution.pending_order_id
         with httpx.Client(timeout=20.0) as client:
-            response = client.delete(
-                f"{base_url}/orders/{order_id}",
+            response = client.post(
+                f"{base_url}/sentinel/orders/cancel",
+                json={"orders": [{"orderId": order_id}]},
                 headers=self._request_headers(runtime),
             )
             if response.status_code >= 400:
@@ -492,14 +503,23 @@ class NoCodeService:
             return
 
         base_url = self._get_base_url(runtime.request.environment)
+        intent_order_id = execution.pending_order_id
         with httpx.Client(timeout=20.0) as client:
             response = client.get(
-                f"{base_url}/orders/v2/{execution.pending_order_id}",
+                f"{base_url}/sentinel/orders",
                 headers=self._request_headers(runtime),
             )
             if response.status_code >= 400:
                 raise HTTPException(status_code=response.status_code, detail=self._extract_error(response))
-            order = response.json()
+            all_orders = response.json()
+
+        order = {}
+        for bucket in (all_orders.get("orders") or {}).values():
+            if isinstance(bucket, list):
+                for item in bucket:
+                    if item.get("intentOrderId") == intent_order_id:
+                        order = item
+                        break
 
         event = OrderUpdateEvent(kind="order", payload=order)
         self._apply_order_update(runtime, event)
@@ -610,24 +630,26 @@ class NoCodeService:
             return
 
         payload = event.payload
-        order_id = payload.get("order_id") or payload.get("id")
+        order_id = payload.get("intentOrderId") or payload.get("order_id") or payload.get("id")
         if execution.pending_order_id is not None and str(order_id) != str(execution.pending_order_id):
             return
 
-        order_status = payload.get("order_status")
+        # V3 uses "status"; legacy used "order_status"
+        order_status = payload.get("status") or payload.get("order_status")
         execution_status = payload.get("execution_status")
         execution.last_order_status = str(order_status) if order_status is not None else execution.last_order_status
         execution.last_execution_status = str(execution_status) if execution_status is not None else execution.last_execution_status
         execution.last_order_update = payload
 
         terminal = {
-            "ORDER_STATUS_FILLED",
-            "ORDER_STATUS_REJECTED",
-            "ORDER_STATUS_CANCELLED",
-            "EXECUTION_STATUS_FILLED",
-            "EXECUTION_STATUS_REJECTED",
-            "EXECUTION_STATUS_CANCELLED",
-            "EXECUTION_STATUS_CLOSED",
+            # V3 statuses
+            "OPEN", "CANCELLED", "EXECUTED", "REJECTED", "EXPIRED",
+            "INTENT_ORDER_STATUS_EXECUTED", "INTENT_ORDER_STATUS_REJECTED",
+            "INTENT_ORDER_STATUS_CANCELLED", "INTENT_ORDER_STATUS_EXPIRED",
+            # Legacy statuses
+            "ORDER_STATUS_FILLED", "ORDER_STATUS_REJECTED", "ORDER_STATUS_CANCELLED",
+            "EXECUTION_STATUS_FILLED", "EXECUTION_STATUS_REJECTED",
+            "EXECUTION_STATUS_CANCELLED", "EXECUTION_STATUS_CLOSED",
         }
         if (order_status not in terminal) and (execution_status not in terminal):
             return

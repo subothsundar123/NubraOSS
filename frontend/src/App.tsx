@@ -10,6 +10,7 @@ import StrategyBuilder from './components/StrategyBuilder'
 import VolumeDashboard from './components/VolumeDashboard'
 import OptionsIntelligenceEngine from './components/options-intelligence/OptionsIntelligenceEngine'
 import EducationPage from './components/EducationPage'
+import SmcDashboard from './components/SmcDashboard'
 import UpdateBanner from './components/UpdateBanner'
 import { DATA_ENVIRONMENT } from './constants/environment'
 import { useAutomation } from './hooks/useAutomation'
@@ -22,7 +23,7 @@ type Environment = 'PROD' | 'UAT'
 type AuthMethod = 'otp' | 'totp'
 type Step = 'start' | 'otp' | 'totp' | 'mpin' | 'success'
 type SignedOutView = 'landing' | 'login'
-type View = SignedOutView | 'dashboard' | 'positioning' | 'no-code' | 'backtest-lab' | 'volume-breakout' | 'tradingview-webhook' | 'scalper' | 'range-trader' | 'execution-auth' | 'options-intelligence' | 'education'
+type View = SignedOutView | 'dashboard' | 'positioning' | 'no-code' | 'backtest-lab' | 'volume-breakout' | 'tradingview-webhook' | 'scalper' | 'range-trader' | 'execution-auth' | 'options-intelligence' | 'education' | 'smc'
 type TradingViewMode = 'strategy' | 'line'
 type TradingViewAction = 'BUY' | 'SELL'
 type Interval = '1m' | '2m' | '3m' | '5m' | '15m' | '30m' | '1h'
@@ -1056,7 +1057,7 @@ export default function App() {
           </div>
           <span className="topbar-sep" />
           <nav className="topbar-nav" aria-label="Primary navigation">
-            {['Dashboard','Positioning','Options Intelligence','Scanner','Webhook','Scalper','Range Trader','Academy'].map((tab) => (
+            {['Dashboard','Positioning','Options Intelligence','Scanner','SMC Dashboard','Webhook','Scalper','Range Trader','Academy'].map((tab) => (
               <button
                 key={tab}
                 type="button"
@@ -1066,6 +1067,7 @@ export default function App() {
                   else if (tab === 'Positioning') setView('positioning')
                   else if (tab === 'Options Intelligence') setView('options-intelligence')
                   else if (tab === 'Scanner') setView('volume-breakout')
+                  else if (tab === 'SMC Dashboard') setView('smc')
                   else if (tab === 'Webhook') setView('tradingview-webhook')
                   else if (tab === 'Scalper') setView('scalper')
                   else if (tab === 'Range Trader') setView('range-trader')
@@ -3634,6 +3636,19 @@ export default function App() {
     )
   }
 
+  if (view === 'smc' && session) {
+    return (
+      <>
+        {persistedPositioning}
+        <SmcDashboard
+          session={session}
+          onBack={() => setView('dashboard')}
+          renderNav={(activeTab: string) => renderDashboardNav(activeTab)}
+        />
+      </>
+    )
+  }
+
   if (view === 'dashboard') {
     const moduleCards = [
 
@@ -3645,6 +3660,7 @@ export default function App() {
       { key: 'scalper' as const,             title: 'Scalper',            sub: 'Intraday live charts',          accent: 'rgb(149,220,122)', glow: '149,220,122', icon: 'chain'    },
       { key: 'range-trader' as const,        title: 'Range Trader',       sub: 'Line-based EQ/F&O execution',   accent: 'rgb(103,232,249)', glow: '103,232,249', icon: 'range'    },
       { key: 'backtest-lab' as const,         title: 'Backtest Lab',       sub: 'Historical strategy testing',   accent: 'rgb(0,118,196)',   glow: '0,118,196',   icon: 'book'     },
+      { key: 'smc' as const,               title: 'SMC Dashboard',      sub: 'Smart Money Concepts · zones · scanner', accent: 'rgb(167,139,250)', glow: '167,139,250', icon: 'smc' },
       { key: null,                           title: 'Risk & Tools',       sub: 'Exposure & position sizing',   accent: 'rgb(241,66,66)',   glow: '241,66,66',   icon: 'risk'     },
     ]
     const iconPaths: Record<string, React.ReactNode> = {
@@ -3657,6 +3673,7 @@ export default function App() {
       range:    <><path d="M4 18h16"/><path d="M5 14l5-5 4 3 5-7"/><path d="M6 7h6"/><path d="M14 14h5"/></>,
       risk:     <><path d="M12 3l8 4v5c0 5-3.5 8-8 9-4.5-1-8-4-8-9V7l8-4z"/><path d="M12 9v4M12 16v.01"/></>,
       options:  <><circle cx={12} cy={12} r={9}/><path d="M9 12l2 2 4-4"/><path d="M12 6v2M12 16v2M6 12H8M16 12h2"/></>,
+      smc:      <><path d="M3 6h18M3 12h10M3 18h6"/><path d="M17 14l3 3-3 3"/><rect x={14} y={10} width={7} height={4} rx={1}/></>,
     }
     return (
       <>

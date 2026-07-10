@@ -177,6 +177,8 @@ class StrategyLiveService:
             "Content-Type": "application/json",
             "Accept": "application/json",
             "x-device-id": device_id,
+            "x-app-version": "0.4.5",
+            "Cookie": f"deviceId={device_id}",
         }
 
     def _extract_error(self, response: httpx.Response) -> str:
@@ -241,16 +243,22 @@ class StrategyLiveService:
             aggressive_price = tick_size
         return max(aggressive_price, tick_size)
 
-    def _fetch_order_snapshot(self, runtime: LiveRuntime, order_id: int) -> dict[str, Any] | None:
+    def _fetch_order_snapshot(self, runtime: LiveRuntime, intent_order_id: int) -> dict[str, Any] | None:
         base_url = self._base_url(runtime.environment)
         with httpx.Client(timeout=10.0) as client:
             response = client.get(
-                f"{base_url}/orders/v2/{order_id}",
+                f"{base_url}/sentinel/orders",
                 headers=self._request_headers(runtime.session_token, runtime.device_id),
             )
             if response.status_code >= 400:
                 return None
-            return response.json()
+            payload = response.json()
+        for bucket in (payload.get("orders") or {}).values():
+            if isinstance(bucket, list):
+                for item in bucket:
+                    if item.get("intentOrderId") == intent_order_id:
+                        return item
+        return None
 
     def _order_delivery_type(self, strategy: ParsedStrategy) -> str:
         if strategy.entry_side == "SELL":
@@ -286,22 +294,27 @@ class StrategyLiveService:
 
         ltp_paise = self._get_current_price_paise(runtime, symbol, exchange)
         order_price = self._compute_aggressive_limit_price(tick_size, order_side, ltp_paise)
+        _side_v3 = "BUY" if order_side in ("ORDER_SIDE_BUY", "BUY") else "SELL"
+        _raw_delivery = self._order_delivery_type(runtime.strategy)
+        _delivery_v3 = "CNC" if _raw_delivery in ("ORDER_DELIVERY_TYPE_CNC", "CNC") else "IDAY"
         payload = {
-            "ref_id": ref_id,
-            "order_type": "ORDER_TYPE_REGULAR",
-            "order_qty": quantity,
-            "order_side": order_side,
-            "order_delivery_type": self._order_delivery_type(runtime.strategy),
-            "validity_type": "IOC",
-            "price_type": "LIMIT",
-            "order_price": order_price,
-            "tag": f"nc_{runtime.strategy.entry_side.lower()}_{symbol.lower()}",
-            "algo_params": {},
+            "orders": [{
+                "refId": ref_id,
+                "qty": quantity,
+                "side": _side_v3,
+                "deliveryType": _delivery_v3,
+                "validityType": "IOC",
+                "priceType": "LIMIT",
+                "isMultiLeg": False,
+                "executionMode": "ENTRY",
+                "entryPrice": order_price,
+                "stratTags": [f"nc_{runtime.strategy.entry_side.lower()}_{symbol.lower()}"],
+            }]
         }
         base_url = self._base_url(runtime.environment)
         with httpx.Client(timeout=20.0) as client:
             response = client.post(
-                f"{base_url}/orders/v2/single",
+                f"{base_url}/sentinel/orders/create",
                 json=payload,
                 headers=self._request_headers(runtime.session_token, runtime.device_id),
             )
@@ -309,13 +322,14 @@ class StrategyLiveService:
                 raise HTTPException(status_code=response.status_code, detail=self._extract_error(response))
             order = response.json()
 
-        order_id = int(order.get("order_id", 0) or 0) or None
+        order_item = (order.get("orders") or [{}])[0]
+        order_id = int(order_item.get("intentOrderId", 0) or 0) or None
         snapshot = self._fetch_order_snapshot(runtime, order_id) if order_id else None
-        effective = snapshot or order
-        filled_qty = int(effective.get("filled_qty", order.get("filled_qty", 0)) or 0)
-        avg_filled_price = effective.get("avg_filled_price", order.get("avg_filled_price"))
+        effective = snapshot or order_item
+        filled_qty = int(effective.get("filledQty", effective.get("filled_qty", 0)) or 0)
+        avg_filled_price = effective.get("filledPrice", effective.get("avg_filled_price"))
         avg_filled_price_value = float(avg_filled_price) if isinstance(avg_filled_price, (int, float)) else None
-        order_status = str(effective.get("order_status") or order.get("order_status") or "submitted")
+        order_status = str(effective.get("status") or effective.get("order_status") or "submitted")
         ltp_rupees = float(ltp_paise) / 100.0
         order_price_rupees = float(order_price) / 100.0
 

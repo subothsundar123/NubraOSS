@@ -13,12 +13,12 @@ def normalize_order_result(
 ) -> dict[str, Any]:
     effective = _extract_order_payload(snapshot) or _extract_order_payload(order) or {}
     fallback = _extract_order_payload(order) or {}
-    order_id = _coerce_int(_first_present(effective, fallback, ("order_id", "id", "oms_order_id", "exchange_order_id")))
+    order_id = _coerce_int(_first_present(effective, fallback, ("intentOrderId", "order_id", "id", "oms_order_id", "exchange_order_id")))
     filled_qty = _coerce_int(
         _first_present(
             effective,
             fallback,
-            ("filled_qty", "filled_quantity", "traded_qty", "executed_qty", "filled", "filledQuantity"),
+            ("filledQty", "filled_qty", "filled_quantity", "traded_qty", "executed_qty", "filled", "filledQuantity"),
         ),
         default=0,
     ) or 0

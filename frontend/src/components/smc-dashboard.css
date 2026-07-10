@@ -1,0 +1,366 @@
+/* SMC Dashboard — Command Center layout */
+
+.smc-shell {
+  display: flex;
+  flex-direction: column;
+  height: 100dvh;
+  background: #0B0D14;
+  color: #D8DFEE;
+  font-family: system-ui, -apple-system, sans-serif;
+  font-size: 13px;
+  overflow: hidden;
+}
+
+/* ── Metric bar ──────────────────────────────────────────────────────────────── */
+.smc-metric-bar {
+  display: flex;
+  gap: 8px;
+  padding: 8px 12px;
+  background: #141927;
+  border-bottom: 1px solid #1A2440;
+  flex-shrink: 0;
+  overflow-x: auto;
+}
+
+.smc-metric-card {
+  background: #1C2235;
+  border: 1px solid #1A2440;
+  border-radius: 4px;
+  padding: 6px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 100px;
+  flex-shrink: 0;
+}
+
+.smc-metric-label {
+  font-family: 'Courier New', monospace;
+  font-size: 9px;
+  color: #5A6488;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.smc-metric-val {
+  font-family: 'Courier New', monospace;
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1.1;
+}
+
+.smc-metric-sub {
+  font-size: 10px;
+  color: #5A6488;
+}
+
+/* ── Body: sidebar + center + scanner ──────────────────────────────────────── */
+.smc-body {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+  min-height: 0;
+}
+
+/* ── Resize handle ─────────────────────────────────────────────────────────── */
+.smc-resize-handle {
+  width: 4px;
+  flex-shrink: 0;
+  cursor: col-resize;
+  background: #1A2440;
+  transition: background 0.15s;
+  position: relative;
+  z-index: 5;
+  user-select: none;
+}
+.smc-resize-handle::after {
+  content: '';
+  position: absolute;
+  inset: 0 -3px;
+}
+.smc-resize-handle:hover { background: rgba(91,156,246,.5); }
+
+/* ── Left sidebar ──────────────────────────────────────────────────────────── */
+.smc-sidebar {
+  flex: 0 0 212px;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  background: #0D101A;
+  min-width: 0;
+}
+
+.smc-zone-card {
+  border-radius: 4px;
+  border: 1px solid transparent;
+  padding: 8px 10px;
+  cursor: default;
+}
+
+.smc-zone-type-label {
+  font-family: 'Courier New', monospace;
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  font-weight: 700;
+}
+
+/* ── Center ────────────────────────────────────────────────────────────────── */
+.smc-center {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-width: 0;
+}
+
+.smc-subhdr {
+  background: #141927;
+  border-bottom: 1px solid #1A2440;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px;
+  height: 40px;
+  flex-shrink: 0;
+  overflow-x: auto;
+}
+
+.smc-sym-pill {
+  font-family: 'Courier New', monospace;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 9px;
+  border-radius: 3px;
+  background: #1C2235;
+  color: #8A96B8;
+  border: 1px solid #1A2440;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: color 0.12s, background 0.12s;
+}
+.smc-sym-pill:hover { color: #D8DFEE; }
+.smc-sym-pill-active { background: rgba(232,160,32,.15) !important; color: #E8A020 !important; border-color: rgba(232,160,32,.4) !important; }
+
+.smc-tf-pill {
+  font-family: 'Courier New', monospace;
+  font-size: 10px;
+  padding: 3px 7px;
+  border-radius: 3px;
+  background: #1C2235;
+  color: #5A6488;
+  border: 1px solid #1A2440;
+  cursor: pointer;
+  transition: color 0.12s, background 0.12s;
+}
+.smc-tf-pill:hover { color: #D8DFEE; }
+.smc-tf-pill-active { background: rgba(232,160,32,.15) !important; color: #E8A020 !important; border-color: rgba(232,160,32,.35) !important; }
+
+.smc-str-badge {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-family: 'Courier New', monospace;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 3px 10px;
+  background: rgba(38,201,168,0.08);
+  border: 1px solid rgba(38,201,168,0.25);
+  border-radius: 3px;
+  white-space: nowrap;
+}
+.smc-str-dot { width: 5px; height: 5px; border-radius: 50%; }
+
+.smc-chart-area {
+  flex: 1;
+  padding: 10px;
+  min-height: 0;
+}
+.smc-chart-wrap {
+  position: relative;
+  height: 100%;
+  background: #141927;
+  border-radius: 4px;
+  overflow: hidden;
+  min-height: 200px;
+}
+.smc-chart-wrap > div:first-child {
+  border-radius: 4px;
+}
+.smc-chart-label {
+  position: absolute;
+  top: 8px;
+  left: 10px;
+  font-family: 'Courier New', monospace;
+  font-size: 10px;
+  color: #5A6488;
+  letter-spacing: 0.05em;
+  pointer-events: none;
+}
+
+/* ── MTF strip ─────────────────────────────────────────────────────────────── */
+.smc-mtf-strip {
+  flex: 0 0 auto;
+  border-top: 1px solid #1A2440;
+  max-height: 170px;
+  overflow-y: auto;
+  background: #0D101A;
+}
+
+.smc-mtf-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11px;
+}
+.smc-mtf-table th {
+  font-family: 'Courier New', monospace;
+  font-size: 9px;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: #5A6488;
+  padding: 5px 10px;
+  text-align: left;
+  border-bottom: 1px solid #1A2440;
+  background: #0D101A;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+.smc-mtf-table td {
+  padding: 5px 10px;
+  border-bottom: 1px solid #1A2440;
+  font-family: 'Courier New', monospace;
+  font-size: 11px;
+  white-space: nowrap;
+}
+.smc-mtf-table tr:hover td { background: #141927; }
+
+.smc-zone-badge {
+  font-family: 'Courier New', monospace;
+  font-size: 9px;
+  padding: 2px 6px;
+  border-radius: 2px;
+}
+.smc-zone-premium  { background: rgba(240,96,122,.15); color: #F0607A; }
+.smc-zone-discount { background: rgba(38,201,168,.15); color: #26C9A8; }
+.smc-zone-equilibrium { background: rgba(255,255,255,.06); color: #8A96B8; }
+
+/* ── Right: scanner ────────────────────────────────────────────────────────── */
+.smc-scanner {
+  flex: 0 0 250px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: #0D101A;
+  min-width: 0;
+}
+
+.smc-scan-row {
+  padding: 8px 12px;
+  border-bottom: 1px solid #1A2440;
+  cursor: pointer;
+}
+.smc-scan-row:hover { background: #141927; }
+
+.smc-filter-bar {
+  display: flex;
+  gap: 4px;
+  padding: 7px 10px;
+  border-bottom: 1px solid #1A2440;
+  flex-wrap: wrap;
+}
+
+.smc-filter-pill {
+  font-family: 'Courier New', monospace;
+  font-size: 9px;
+  padding: 2px 7px;
+  border-radius: 2px;
+  cursor: pointer;
+  background: #1C2235;
+  color: #5A6488;
+  border: 1px solid #1A2440;
+  transition: opacity 0.12s;
+}
+.smc-filter-pill.on { border-color: currentColor; }
+.fp-bos_up    { color: #26C9A8; background: rgba(38,201,168,.1); }
+.fp-bos_down  { color: #F0607A; background: rgba(240,96,122,.1); }
+.fp-choch_up  { color: #A78BFA; background: rgba(167,139,250,.1); }
+.fp-choch_down{ color: #A78BFA; background: rgba(167,139,250,.1); }
+.fp-sweep-up  { color: #E8A020; background: rgba(232,160,32,.1); }
+.fp-sweep-down{ color: #E8A020; background: rgba(232,160,32,.1); }
+.fp-ob_test   { color: #E8A020; background: rgba(232,160,32,.1); }
+.fp-fvg_entry { color: #5B9CF6; background: rgba(91,156,246,.1); }
+
+/* ── Shared signal badge ───────────────────────────────────────────────────── */
+.smc-sig {
+  font-family: 'Courier New', monospace;
+  font-size: 9px;
+  font-weight: 700;
+  padding: 2px 5px;
+  border-radius: 2px;
+}
+.sig-bos-up   { background: rgba(38,201,168,.15); color: #26C9A8; }
+.sig-bos-dn   { background: rgba(240,96,122,.15); color: #F0607A; }
+.sig-choch-up { background: rgba(167,139,250,.15); color: #A78BFA; }
+.sig-choch-dn { background: rgba(167,139,250,.15); color: #A78BFA; }
+.sig-ob       { background: rgba(232,160,32,.15); color: #E8A020; }
+.sig-fvg      { background: rgba(91,156,246,.15); color: #5B9CF6; }
+.sig-none     { background: rgba(90,100,136,.1); color: #5A6488; }
+
+/* ── Shared panel title ────────────────────────────────────────────────────── */
+.smc-panel-title {
+  font-family: 'Courier New', monospace;
+  font-size: 9px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #5A6488;
+  padding: 8px 12px 7px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-shrink: 0;
+}
+
+/* ── Misc ──────────────────────────────────────────────────────────────────── */
+.smc-live-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #26C9A8;
+  animation: smc-pulse 1.8s ease-in-out infinite;
+  flex-shrink: 0;
+}
+@keyframes smc-pulse { 0%, 100% { opacity: 1 } 50% { opacity: 0.3 } }
+
+.smc-ghost-btn {
+  font-family: 'Courier New', monospace;
+  font-size: 10px;
+  padding: 3px 8px;
+  border-radius: 3px;
+  background: transparent;
+  color: #8A96B8;
+  border: 1px solid #1A2440;
+  cursor: pointer;
+  transition: color 0.12s, border-color 0.12s;
+}
+.smc-ghost-btn:hover { color: #D8DFEE; border-color: #253050; }
+
+.smc-today-btn {
+  font-family: 'Courier New', monospace;
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  padding: 3px 8px;
+  border-radius: 3px;
+  background: transparent;
+  color: #5A6488;
+  border: 1px solid #1A2440;
+  cursor: pointer;
+  transition: color 0.12s, border-color 0.12s, background 0.12s;
+}
+.smc-today-btn:hover { color: #D8DFEE; border-color: #253050; }
+.smc-today-btn-on {
+  color: #26C9A8;
+  border-color: rgba(38,201,168,.4);
+  background: rgba(38,201,168,.08);
+}
+.smc-today-btn-on:hover { background: rgba(38,201,168,.14); }

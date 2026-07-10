@@ -66,6 +66,8 @@ class AuthService:
             "Content-Type": "application/json",
             "Accept": "application/json",
             "x-device-id": device_id,
+            "x-app-version": "0.4.5",
+            "Cookie": f"deviceId={device_id}",
         }
 
     def _find_nested_string(self, payload: object, field_name: str, *, depth: int = 4) -> str | None:
@@ -119,9 +121,9 @@ class AuthService:
     ) -> str | None:
         headers = self._session_headers(session_token, device_id)
         for path in (
-            "portfolio/user_funds_and_margin",
-            "portfolio/v2/positions",
-            "portfolio/holdings",
+            "sentinel/portfolio/user_funds_and_margin",
+            "sentinel/portfolio/positions",
+            "sentinel/portfolio/holdings",
             "userinfo",
         ):
             try:
@@ -162,11 +164,30 @@ class AuthService:
 
         try:
             with httpx.Client(timeout=20.0) as client:
+                # V3 Step 1: get initial temp_token (skip_totp=false, no x-temp-token)
+                resp1 = client.post(
+                    f"{base_url}/sendphoneotp",
+                    json={"phone": payload.phone, "skip_totp": False},
+                    headers={"Content-Type": "application/json"},
+                )
+                if resp1.status_code >= 400:
+                    raise HTTPException(
+                        status_code=resp1.status_code,
+                        detail=self._extract_error(resp1),
+                    )
+                init_token = resp1.json().get("temp_token")
+                if not init_token:
+                    raise HTTPException(
+                        status_code=502,
+                        detail="Nubra did not return temp_token in the OTP init step.",
+                    )
+                # V3 Step 2: send OTP using the temp_token from Step 1
                 response = client.post(
                     f"{base_url}/sendphoneotp",
                     json={"phone": payload.phone, "skip_totp": True},
                     headers={
                         "Content-Type": "application/json",
+                        "x-temp-token": init_token,
                         "x-device-id": device_id,
                     },
                 )

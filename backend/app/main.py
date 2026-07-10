@@ -113,9 +113,12 @@ from app.schemas import (
     OIEAnalyticsResponse,
     OIEIntelligenceRequest,
     OIEIntelligenceResponse,
+    SmcSnapshotRequest,
+    SmcScanRequest,
 )
 from app.db import connect_db, load_intraday_candles_for_symbol
 from app.services.auth_service import auth_service
+from app.services.smc_service import smc_service
 from app.services.instrument_service import instrument_service
 from app.services.positioning.event_bus import positioning_event_bus
 from app.services.positioning.orchestrator import positioning_orchestrator
@@ -1569,6 +1572,30 @@ async def oie_ws(websocket: WebSocket) -> None:
             await websocket.close()
         except Exception:
             pass
+
+
+@app.post("/api/smc/snapshot")
+def smc_snapshot(payload: SmcSnapshotRequest) -> dict:
+    return smc_service.snapshot(
+        session_token=payload.session_token,
+        device_id=payload.device_id,
+        environment=payload.environment,
+        exchange=payload.exchange,
+        symbol=payload.symbol,
+        interval=payload.interval,
+    )
+
+
+@app.post("/api/smc/scan")
+def smc_scan(payload: SmcScanRequest) -> dict:
+    return smc_service.scan(
+        session_token=payload.session_token,
+        device_id=payload.device_id,
+        environment=payload.environment,
+        exchange=payload.exchange,
+        symbols=payload.symbols,
+        interval=payload.interval,
+    )
 
 
 @app.websocket("/ws/oie-ltp")

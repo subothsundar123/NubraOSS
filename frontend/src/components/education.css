@@ -513,3 +513,136 @@
 @media (max-width: 480px) {
   .edu-sidebar { display: none; }
 }
+
+/* ── Academy Landing ───────────────────────────────────────────────────── */
+.edu-landing {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 32px;
+  padding: 40px 24px;
+  overflow-y: auto;
+}
+.edu-landing-title {
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--fg);
+  letter-spacing: -0.02em;
+  text-align: center;
+}
+.edu-landing-sub {
+  font-size: 13px;
+  color: var(--fg-faint);
+  text-align: center;
+  margin-top: -22px;
+}
+.edu-module-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 20px;
+  width: 100%;
+  max-width: 720px;
+}
+@media (max-width: 560px) {
+  .edu-module-grid { grid-template-columns: 1fr; }
+}
+.edu-module-tile {
+  background: rgba(255,255,255,.03);
+  border: 1px solid var(--hairline);
+  border-radius: 12px;
+  padding: 28px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  cursor: pointer;
+  transition: border-color .18s, background .18s, transform .15s;
+  text-align: left;
+  position: relative;
+  overflow: hidden;
+}
+.edu-module-tile:hover {
+  transform: translateY(-2px);
+}
+.edu-module-tile-greeks {
+  border-color: rgba(111,209,215,.25);
+  background: rgba(111,209,215,.04);
+}
+.edu-module-tile-greeks:hover {
+  border-color: rgba(111,209,215,.5);
+  background: rgba(111,209,215,.08);
+}
+.edu-module-tile-smc {
+  border-color: rgba(167,139,250,.25);
+  background: rgba(167,139,250,.04);
+}
+.edu-module-tile-smc:hover {
+  border-color: rgba(167,139,250,.5);
+  background: rgba(167,139,250,.08);
+}
+.edu-module-icon {
+  font-size: 32px;
+  line-height: 1;
+}
+.edu-module-name {
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--fg);
+  letter-spacing: -0.01em;
+}
+.edu-module-desc {
+  font-size: 12px;
+  color: var(--fg-faint);
+  line-height: 1.6;
+}
+.edu-module-topics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 2px;
+}
+.edu-module-topic {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: 3px;
+  letter-spacing: 0.04em;
+}
+.edu-module-tile-greeks .edu-module-topic {
+  background: rgba(111,209,215,.1);
+  color: var(--edu-teal);
+  border: 1px solid rgba(111,209,215,.2);
+}
+.edu-module-tile-smc .edu-module-topic {
+  background: rgba(167,139,250,.1);
+  color: var(--edu-purple);
+  border: 1px solid rgba(167,139,250,.2);
+}
+.edu-module-cta {
+  margin-top: 4px;
+  font-size: 12px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.edu-module-tile-greeks .edu-module-cta { color: var(--edu-teal); }
+.edu-module-tile-smc .edu-module-cta { color: var(--edu-purple); }
+
+/* ── Back button ───────────────────────────────────────────────────────── */
+.edu-back-btn {
+  background: transparent;
+  border: 1px solid var(--hairline);
+  color: var(--fg-faint);
+  padding: 5px 12px;
+  border-radius: 5px;
+  font-size: 11px;
+  cursor: pointer;
+  transition: all .15s;
+  white-space: nowrap;
+}
+.edu-back-btn:hover {
+  background: rgba(255,255,255,.05);
+  color: var(--fg);
+}

@@ -228,6 +228,8 @@ class RangeTraderLiveSession:
             "Content-Type": "application/json",
             "Accept": "application/json",
             "x-device-id": self._device_id,
+            "x-app-version": "0.4.5",
+            "Cookie": f"deviceId={self._device_id}",
         }
 
     def _is_market_open(self) -> bool:
@@ -798,17 +800,19 @@ class RangeTraderLiveSession:
         if lot_size > 1 and order_qty % lot_size != 0:
             order_qty += lot_size - (order_qty % lot_size)
         price_type = "MARKET" if setup["order_type"] == "MARKET" else "LIMIT"
-        payload: dict[str, Any] = {
-            "ref_id": ref_id,
-            "order_type": "ORDER_TYPE_REGULAR",
-            "order_qty": order_qty,
-            "order_side": order_side,
-            "order_delivery_type": "ORDER_DELIVERY_TYPE_IDAY",
-            "validity_type": "IOC",
-            "price_type": price_type,
-            "tag": tag,
-            "algo_params": {},
+        _side_v3 = "BUY" if order_side in ("ORDER_SIDE_BUY", "BUY") else "SELL"
+        _order_item: dict[str, Any] = {
+            "refId": ref_id,
+            "qty": order_qty,
+            "side": _side_v3,
+            "deliveryType": "IDAY",
+            "validityType": "IOC",
+            "priceType": price_type,
+            "isMultiLeg": False,
+            "executionMode": "ENTRY",
+            "stratTags": [tag],
         }
+        payload: dict[str, Any] = {"orders": [_order_item]}
         order_price: int | None = None
         if price_type == "LIMIT":
             setup_payload = setup.get("payload") if isinstance(setup.get("payload"), dict) else {}
@@ -819,8 +823,8 @@ class RangeTraderLiveSession:
                 order_price = self._round_limit_price(order_side, float(limit_price), tick_size)
             else:
                 order_price = self._aggressive_limit_price(order_side, ltp_price, tick_size)
-            payload["order_price"] = order_price
-        url = f"{self._base_url()}/orders/v2/single"
+            _order_item["entryPrice"] = order_price
+        url = f"{self._base_url()}/sentinel/orders/create"
         log.warning(
             "range_trader_live submit_order setup_id=%s environment=%s symbol=%s resolved_exchange=%s url=%s payload=%s",
             self._setup_id,
@@ -847,7 +851,7 @@ class RangeTraderLiveSession:
             order_price_paise=order_price,
             ltp_price=ltp_price,
         )
-        order_id = instrument_service._coerce_positive_int(order.get("order_id")) or initial.get("order_id")  # noqa: SLF001
+        order_id = initial.get("order_id")
         snapshot = self._wait_for_order_snapshot(order_id) if order_id is not None else None
         normalized = normalize_order_result(
             order,
@@ -871,13 +875,18 @@ class RangeTraderLiveSession:
                 letters = letters[: -len(suffix)]
         return letters or value
 
-    def _fetch_order_snapshot(self, order_id: int) -> dict[str, Any] | None:
+    def _fetch_order_snapshot(self, intent_order_id: int) -> dict[str, Any] | None:
         with httpx.Client(timeout=10.0) as client:
-            response = client.get(f"{self._base_url()}/orders/v2/{order_id}", headers=self._request_headers())
+            response = client.get(f"{self._base_url()}/sentinel/orders", headers=self._request_headers())
             if response.status_code >= 400:
                 return None
             payload = response.json()
-        return payload if isinstance(payload, dict) else None
+        for bucket in (payload.get("orders") or {}).values():
+            if isinstance(bucket, list):
+                for item in bucket:
+                    if item.get("intentOrderId") == intent_order_id:
+                        return item
+        return None
 
     def _wait_for_order_snapshot(self, order_id: int) -> dict[str, Any] | None:
         snapshot = None
@@ -1211,6 +1220,8 @@ class RangeTraderQuoteSession:
             "Content-Type": "application/json",
             "Accept": "application/json",
             "x-device-id": self._device_id,
+            "x-app-version": "0.4.5",
+            "Cookie": f"deviceId={self._device_id}",
         }
 
     def _start_feed_thread(self) -> None:

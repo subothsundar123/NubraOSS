@@ -900,39 +900,516 @@ function SectionContent({ id }: { id: string }) {
   }
 }
 
-/* ── Main Component ──────────────────────────────────────────────────── */
-export default function EducationPage({ onClose }: { onClose: () => void }) {
-  const [idx, setIdx] = useState(0)
-  const section = SECTIONS[idx]
+/* ── SMC Sections ────────────────────────────────────────────────────────── */
+const SMC_SECTIONS: Section[] = [
+  { id: 'smc-struct', title: 'Market Structure',   sub: 'HH · HL · LH · LL' },
+  { id: 'smc-ob',     title: 'Order Blocks',        sub: 'OB↑ · OB↓ · Mitigation' },
+  { id: 'smc-fvg',    title: 'Fair Value Gap',      sub: 'FVG · Imbalance · Fill' },
+  { id: 'smc-bos',    title: 'BOS & CHoCH',         sub: 'Break of Structure · Reversal' },
+  { id: 'smc-liq',    title: 'Liquidity',           sub: 'BSL · SSL · Stop Hunts' },
+  { id: 'smc-pd',     title: 'Premium / Discount',  sub: 'Equilibrium · Golden Zone' },
+]
 
+/* ── SMC SVG Diagrams ─────────────────────────────────────────────────────── */
+
+function DiagramSMCStructure() {
+  const path = 'M 25 225 L 95 148 L 155 183 L 230 100 L 294 142 L 370 68'
+  return (
+    <svg viewBox="0 0 420 255" style={{ width: '100%', height: 'auto' }}>
+      <line x1={20} y1={238} x2={400} y2={238} stroke="rgba(255,255,255,.08)" strokeWidth={1} />
+      <line x1={20} y1={20} x2={20} y2={238} stroke="rgba(255,255,255,.08)" strokeWidth={1} />
+      <path d={`${path} L 370 238 L 25 238 Z`} fill="rgba(38,201,168,.05)" />
+      <line x1={95} y1={148} x2={230} y2={148} stroke="rgba(255,255,255,.1)" strokeWidth={1} strokeDasharray="3 4" />
+      <line x1={230} y1={100} x2={370} y2={100} stroke="rgba(255,255,255,.1)" strokeWidth={1} strokeDasharray="3 4" />
+      <line x1={25} y1={225} x2={155} y2={225} stroke="rgba(38,201,168,.15)" strokeWidth={1} strokeDasharray="3 4" />
+      <line x1={155} y1={183} x2={294} y2={183} stroke="rgba(38,201,168,.15)" strokeWidth={1} strokeDasharray="3 4" />
+      <path d={path} fill="none" stroke="#26C9A8" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" />
+      <circle cx={25} cy={225} r={4.5} fill="#F0607A" />
+      <circle cx={95} cy={148} r={3.5} fill="rgba(255,255,255,.55)" />
+      <circle cx={155} cy={183} r={4.5} fill="#26C9A8" />
+      <circle cx={230} cy={100} r={4.5} fill="rgba(255,255,255,.9)" />
+      <circle cx={294} cy={142} r={4.5} fill="#26C9A8" />
+      <circle cx={370} cy={68} r={4.5} fill="rgba(255,255,255,.9)" />
+      <text x={25} y={244} fontSize={9} fill="#F0607A" textAnchor="middle" fontWeight={700}>LL</text>
+      <text x={95} y={140} fontSize={9} fill="rgba(255,255,255,.55)" textAnchor="middle" fontWeight={700}>LH</text>
+      <text x={155} y={200} fontSize={9} fill="#26C9A8" textAnchor="middle" fontWeight={700}>HL</text>
+      <text x={230} y={91} fontSize={9} fill="rgba(255,255,255,.9)" textAnchor="middle" fontWeight={700}>HH</text>
+      <text x={294} y={159} fontSize={9} fill="#26C9A8" textAnchor="middle" fontWeight={700}>HL</text>
+      <text x={370} y={59} fontSize={9} fill="rgba(255,255,255,.9)" textAnchor="middle" fontWeight={700}>HH</text>
+      <rect x={4} y={4} width={110} height={16} rx={3} fill="rgba(38,201,168,.12)" stroke="rgba(38,201,168,.3)" strokeWidth={1} />
+      <text x={59} y={15} fontSize={9} fill="#26C9A8" textAnchor="middle" fontWeight={700}>BULLISH STRUCTURE</text>
+    </svg>
+  )
+}
+
+function DiagramOrderBlocks() {
+  return (
+    <svg viewBox="0 0 420 270" style={{ width: '100%', height: 'auto' }}>
+      <line x1={210} y1={10} x2={210} y2={260} stroke="rgba(255,255,255,.07)" strokeWidth={1} />
+      <text x={105} y={18} fontSize={9} fill="#26C9A8" textAnchor="middle" fontWeight={700}>BULLISH OB↑</text>
+      {[{ x: 30, bodyT: 118, bodyB: 140, wT: 111, wB: 147 }, { x: 58, bodyT: 132, bodyB: 155, wT: 124, wB: 163 }].map((c, i) => (
+        <g key={i}>
+          <line x1={c.x + 6} y1={c.wT} x2={c.x + 6} y2={c.wB} stroke="#F0607A" strokeWidth={1} />
+          <rect x={c.x} y={c.bodyT} width={12} height={c.bodyB - c.bodyT} fill="#F0607A" rx={1} />
+        </g>
+      ))}
+      <rect x={82} y={146} width={16} height={26} rx={2} fill="none" stroke="#26C9A8" strokeWidth={1.5} />
+      <line x1={90} y1={140} x2={90} y2={178} stroke="#F0607A" strokeWidth={1} />
+      <rect x={83} y={148} width={14} height={22} fill="#F0607A" rx={1} />
+      <text x={90} y={192} fontSize={8} fill="#26C9A8" textAnchor="middle" fontWeight={700}>OB↑</text>
+      <rect x={82} y={146} width={108} height={26} rx={1} fill="rgba(38,201,168,.07)" stroke="rgba(38,201,168,.28)" strokeWidth={1} strokeDasharray="4 3" />
+      {[{ x: 108, bodyT: 126, bodyB: 155, wT: 118, wB: 162 }, { x: 133, bodyT: 98, bodyB: 133, wT: 90, wB: 140 }, { x: 158, bodyT: 72, bodyB: 106, wT: 65, wB: 113 }].map((c, i) => (
+        <g key={i}>
+          <line x1={c.x + 6} y1={c.wT} x2={c.x + 6} y2={c.wB} stroke="#26C9A8" strokeWidth={1} />
+          <rect x={c.x} y={c.bodyT} width={12} height={c.bodyB - c.bodyT} fill="#26C9A8" rx={1} />
+        </g>
+      ))}
+      <path d="M 195 95 L 195 158 M 191 153 L 195 158 L 199 153" fill="none" stroke="rgba(38,201,168,.65)" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" />
+      <text x={197} y={130} fontSize={8} fill="rgba(38,201,168,.7)" fontStyle="italic">retest</text>
+
+      <text x={315} y={18} fontSize={9} fill="#F0607A" textAnchor="middle" fontWeight={700}>BEARISH OB↓</text>
+      {[{ x: 222, bodyT: 148, bodyB: 170, wT: 140, wB: 178 }, { x: 250, bodyT: 128, bodyB: 152, wT: 120, wB: 159 }].map((c, i) => (
+        <g key={i}>
+          <line x1={c.x + 6} y1={c.wT} x2={c.x + 6} y2={c.wB} stroke="#26C9A8" strokeWidth={1} />
+          <rect x={c.x} y={c.bodyT} width={12} height={c.bodyB - c.bodyT} fill="#26C9A8" rx={1} />
+        </g>
+      ))}
+      <rect x={274} y={100} width={16} height={28} rx={2} fill="none" stroke="#F0607A" strokeWidth={1.5} />
+      <line x1={282} y1={93} x2={282} y2={134} stroke="#26C9A8" strokeWidth={1} />
+      <rect x={275} y={102} width={14} height={24} fill="#26C9A8" rx={1} />
+      <text x={282} y={92} fontSize={8} fill="#F0607A" textAnchor="middle" fontWeight={700}>OB↓</text>
+      <rect x={274} y={100} width={110} height={28} rx={1} fill="rgba(240,96,122,.07)" stroke="rgba(240,96,122,.28)" strokeWidth={1} strokeDasharray="4 3" />
+      {[{ x: 300, bodyT: 122, bodyB: 152, wT: 115, wB: 160 }, { x: 325, bodyT: 148, bodyB: 178, wT: 140, wB: 186 }, { x: 350, bodyT: 172, bodyB: 202, wT: 164, wB: 210 }].map((c, i) => (
+        <g key={i}>
+          <line x1={c.x + 6} y1={c.wT} x2={c.x + 6} y2={c.wB} stroke="#F0607A" strokeWidth={1} />
+          <rect x={c.x} y={c.bodyT} width={12} height={c.bodyB - c.bodyT} fill="#F0607A" rx={1} />
+        </g>
+      ))}
+      <path d="M 388 190 L 388 118 M 384 123 L 388 118 L 392 123" fill="none" stroke="rgba(240,96,122,.65)" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" />
+      <text x={390} y={158} fontSize={8} fill="rgba(240,96,122,.7)" fontStyle="italic">retest</text>
+    </svg>
+  )
+}
+
+function DiagramFVG() {
+  return (
+    <svg viewBox="0 0 420 255" style={{ width: '100%', height: 'auto' }}>
+      <line x1={210} y1={8} x2={210} y2={248} stroke="rgba(255,255,255,.07)" strokeWidth={1} />
+      <text x={105} y={17} fontSize={9} fill="#26C9A8" textAnchor="middle" fontWeight={700}>BULLISH FVG ↑</text>
+      <line x1={58} y1={196} x2={58} y2={220} stroke="#26C9A8" strokeWidth={1} />
+      <rect x={52} y={198} width={12} height={18} fill="#26C9A8" rx={1} />
+      <line x1={88} y1={110} x2={88} y2={200} stroke="#26C9A8" strokeWidth={1} />
+      <rect x={82} y={114} width={12} height={82} fill="#26C9A8" rx={1} />
+      <line x1={118} y1={66} x2={118} y2={136} stroke="#26C9A8" strokeWidth={1} />
+      <rect x={112} y={70} width={12} height={62} fill="#26C9A8" rx={1} />
+      <rect x={52} y={136} width={85} height={60} rx={2} fill="rgba(38,201,168,.15)" stroke="rgba(38,201,168,.4)" strokeWidth={1} strokeDasharray="3 3" />
+      <text x={95} y={167} fontSize={9} fill="#26C9A8" textAnchor="middle" fontWeight={700}>FVG</text>
+      <text x={95} y={179} fontSize={8} fill="rgba(38,201,168,.65)" textAnchor="middle">C1.high → C3.low</text>
+      <text x={58} y={232} fontSize={8} fill="rgba(255,255,255,.3)" textAnchor="middle">C1</text>
+      <text x={88} y={232} fontSize={8} fill="rgba(255,255,255,.3)" textAnchor="middle">C2</text>
+      <text x={118} y={232} fontSize={8} fill="rgba(255,255,255,.3)" textAnchor="middle">C3</text>
+      <path d="M 150 100 L 150 142 M 146 138 L 150 142 L 154 138" fill="none" stroke="rgba(38,201,168,.55)" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" />
+      <text x={174} y={122} fontSize={8} fill="rgba(38,201,168,.65)">fills ↓</text>
+
+      <text x={315} y={17} fontSize={9} fill="#F0607A" textAnchor="middle" fontWeight={700}>BEARISH FVG ↓</text>
+      <line x1={265} y1={44} x2={265} y2={70} stroke="#F0607A" strokeWidth={1} />
+      <rect x={259} y={46} width={12} height={20} fill="#F0607A" rx={1} />
+      <line x1={295} y1={58} x2={295} y2={152} stroke="#F0607A" strokeWidth={1} />
+      <rect x={289} y={62} width={12} height={86} fill="#F0607A" rx={1} />
+      <line x1={325} y1={116} x2={325} y2={194} stroke="#F0607A" strokeWidth={1} />
+      <rect x={319} y={120} width={12} height={70} fill="#F0607A" rx={1} />
+      <rect x={259} y={70} width={85} height={46} rx={2} fill="rgba(240,96,122,.15)" stroke="rgba(240,96,122,.4)" strokeWidth={1} strokeDasharray="3 3" />
+      <text x={302} y={95} fontSize={9} fill="#F0607A" textAnchor="middle" fontWeight={700}>FVG</text>
+      <text x={302} y={107} fontSize={8} fill="rgba(240,96,122,.65)" textAnchor="middle">C3.high → C1.low</text>
+      <text x={265} y={210} fontSize={8} fill="rgba(255,255,255,.3)" textAnchor="middle">C1</text>
+      <text x={295} y={210} fontSize={8} fill="rgba(255,255,255,.3)" textAnchor="middle">C2</text>
+      <text x={325} y={210} fontSize={8} fill="rgba(255,255,255,.3)" textAnchor="middle">C3</text>
+      <path d="M 358 152 L 358 104 M 354 109 L 358 104 L 362 109" fill="none" stroke="rgba(240,96,122,.55)" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" />
+      <text x={372} y={130} fontSize={8} fill="rgba(240,96,122,.65)">fills ↑</text>
+    </svg>
+  )
+}
+
+function DiagramBOSChoCH() {
+  return (
+    <svg viewBox="0 0 420 248" style={{ width: '100%', height: 'auto' }}>
+      <line x1={210} y1={8} x2={210} y2={240} stroke="rgba(255,255,255,.07)" strokeWidth={1} />
+      <text x={105} y={17} fontSize={10} fill="#A78BFA" textAnchor="middle" fontWeight={700}>CHoCH — Change of Character</text>
+      <path d="M 22 48 L 68 140 L 108 102 L 155 168" fill="none" stroke="rgba(240,96,122,.7)" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+      <line x1={68} y1={102} x2={200} y2={102} stroke="rgba(167,139,250,.35)" strokeWidth={1} strokeDasharray="4 3" />
+      <path d="M 155 168 L 196 86" fill="none" stroke="#A78BFA" strokeWidth={2.2} strokeLinecap="round" />
+      <path d="M 193 90 L 196 86 L 199 91" fill="none" stroke="#A78BFA" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" />
+      <rect x={130} y={67} width={60} height={18} rx={3} fill="rgba(167,139,250,.18)" stroke="rgba(167,139,250,.5)" strokeWidth={1} />
+      <text x={160} y={80} fontSize={9} fill="#A78BFA" textAnchor="middle" fontWeight={800}>CHoCH ↑</text>
+      <text x={22} y={44} fontSize={8} fill="rgba(255,255,255,.4)" textAnchor="middle">HH</text>
+      <text x={68} y={152} fontSize={8} fill="rgba(255,255,255,.35)" textAnchor="middle">LL</text>
+      <text x={108} y={95} fontSize={8} fill="rgba(255,255,255,.35)" textAnchor="middle">LH</text>
+      <text x={155} y={180} fontSize={8} fill="rgba(255,255,255,.35)" textAnchor="middle">LL</text>
+      <text x={108} y={110} fontSize={8} fill="rgba(167,139,250,.55)">breaks LH</text>
+      <text x={105} y={228} fontSize={9} fill="rgba(167,139,250,.65)" textAnchor="middle">First break against trend = reversal signal</text>
+
+      <text x={315} y={17} fontSize={10} fill="#26C9A8" textAnchor="middle" fontWeight={700}>BOS — Break of Structure</text>
+      <path d="M 218 202 L 265 125 L 305 158 L 360 82" fill="none" stroke="#26C9A8" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+      <line x1={218} y1={125} x2={410} y2={125} stroke="rgba(38,201,168,.3)" strokeWidth={1} strokeDasharray="4 3" />
+      <path d="M 360 82 L 398 54" fill="none" stroke="#26C9A8" strokeWidth={2.2} strokeLinecap="round" />
+      <path d="M 395 58 L 398 54 L 401 59" fill="none" stroke="#26C9A8" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" />
+      <rect x={336} y={56} width={52} height={18} rx={3} fill="rgba(38,201,168,.15)" stroke="rgba(38,201,168,.45)" strokeWidth={1} />
+      <text x={362} y={69} fontSize={9} fill="#26C9A8" textAnchor="middle" fontWeight={800}>BOS ↑</text>
+      <text x={218} y={215} fontSize={8} fill="rgba(255,255,255,.35)" textAnchor="middle">HL</text>
+      <text x={265} y={117} fontSize={8} fill="rgba(255,255,255,.35)" textAnchor="middle">HH</text>
+      <text x={305} y={170} fontSize={8} fill="rgba(255,255,255,.35)" textAnchor="middle">HL</text>
+      <text x={240} y={119} fontSize={8} fill="rgba(38,201,168,.55)">prev HH</text>
+      <text x={315} y={228} fontSize={9} fill="rgba(38,201,168,.65)" textAnchor="middle">Same-direction break = trend confirmation</text>
+    </svg>
+  )
+}
+
+function DiagramLiquidity() {
+  return (
+    <svg viewBox="0 0 420 252" style={{ width: '100%', height: 'auto' }}>
+      <line x1={210} y1={8} x2={210} y2={244} stroke="rgba(255,255,255,.07)" strokeWidth={1} />
+      <text x={105} y={17} fontSize={9} fill="#E8A020" textAnchor="middle" fontWeight={700}>BUY SIDE LIQUIDITY (BSL)</text>
+      <line x1={25} y1={95} x2={190} y2={95} stroke="rgba(232,160,32,.5)" strokeWidth={1.5} strokeDasharray="5 3" />
+      <text x={15} y={99} fontSize={8} fill="rgba(232,160,32,.8)" textAnchor="end">BSL</text>
+      <path d="M 30 178 L 58 95 L 85 148 L 112 96 L 140 150 L 165 96" fill="none" stroke="rgba(255,255,255,.5)" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M 165 96 L 172 60 L 178 200" fill="none" stroke="rgba(255,255,255,.6)" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" />
+      <line x1={172} y1={60} x2={172} y2={48} stroke="rgba(232,160,32,.7)" strokeWidth={1} />
+      <rect x={142} y={36} width={72} height={14} rx={2} fill="rgba(232,160,32,.18)" stroke="rgba(232,160,32,.4)" strokeWidth={1} />
+      <text x={178} y={46} fontSize={8} fill="#E8A020" textAnchor="middle" fontWeight={700}>SWEEP ↑</text>
+      <path d="M 178 200 L 184 218" fill="none" stroke="#F0607A" strokeWidth={2} strokeLinecap="round" />
+      <path d="M 181 214 L 184 218 L 187 214" fill="none" stroke="#F0607A" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" />
+      <text x={105} y={238} fontSize={8} fill="#F0607A" textAnchor="middle">Reversal after sweep</text>
+
+      <text x={315} y={17} fontSize={9} fill="#5B9CF6" textAnchor="middle" fontWeight={700}>SELL SIDE LIQUIDITY (SSL)</text>
+      <line x1={220} y1={175} x2={390} y2={175} stroke="rgba(91,156,246,.5)" strokeWidth={1.5} strokeDasharray="5 3" />
+      <text x={396} y={179} fontSize={8} fill="rgba(91,156,246,.8)">SSL</text>
+      <path d="M 225 90 L 248 175 L 274 120 L 300 176 L 326 122 L 350 175" fill="none" stroke="rgba(255,255,255,.5)" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M 350 175 L 358 212 L 364 58" fill="none" stroke="rgba(255,255,255,.6)" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" />
+      <line x1={358} y1={212} x2={358} y2={224} stroke="rgba(91,156,246,.7)" strokeWidth={1} />
+      <rect x={328} y={222} width={72} height={14} rx={2} fill="rgba(91,156,246,.18)" stroke="rgba(91,156,246,.4)" strokeWidth={1} />
+      <text x={364} y={232} fontSize={8} fill="#5B9CF6" textAnchor="middle" fontWeight={700}>SWEEP ↓</text>
+      <path d="M 364 78 L 369 44" fill="none" stroke="#26C9A8" strokeWidth={2} strokeLinecap="round" />
+      <path d="M 366 48 L 369 44 L 372 48" fill="none" stroke="#26C9A8" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" />
+      <text x={315} y={238} fontSize={8} fill="#26C9A8" textAnchor="middle">Reversal after sweep</text>
+    </svg>
+  )
+}
+
+function DiagramPremiumDiscount() {
+  const bx = 90, bT = 22, bB = 232, bH = bB - bT, bW = 50
+  const eq = bT + bH * 0.5
+  const g618 = bT + bH * 0.382
+  return (
+    <svg viewBox="0 0 420 258" style={{ width: '100%', height: 'auto' }}>
+      <rect x={bx} y={bT} width={bW} height={bH / 2} rx={3} fill="rgba(240,96,122,.2)" stroke="rgba(240,96,122,.4)" strokeWidth={1} />
+      <rect x={bx} y={eq} width={bW} height={bH / 2} rx={3} fill="rgba(38,201,168,.2)" stroke="rgba(38,201,168,.4)" strokeWidth={1} />
+      <rect x={bx} y={g618} width={bW} height={bH * 0.12} rx={1} fill="rgba(232,160,32,.35)" stroke="rgba(232,160,32,.6)" strokeWidth={1} />
+      <text x={bx - 6} y={bT + 12} fontSize={9} fill="rgba(240,96,122,.9)" textAnchor="end" fontWeight={700}>100%</text>
+      <text x={bx - 6} y={bT + bH * 0.18} fontSize={8} fill="rgba(240,96,122,.7)" textAnchor="end">PREMIUM</text>
+      <text x={bx - 6} y={bT + bH * 0.25} fontSize={8} fill="rgba(240,96,122,.45)" textAnchor="end">Sell zone</text>
+      <text x={bx - 6} y={eq - 3} fontSize={9} fill="rgba(255,255,255,.7)" textAnchor="end" fontWeight={700}>50%</text>
+      <text x={bx - 6} y={g618 + 7} fontSize={8} fill="rgba(232,160,32,.85)" textAnchor="end" fontWeight={700}>61.8%</text>
+      <text x={bx - 6} y={bT + bH * 0.78} fontSize={8} fill="rgba(38,201,168,.7)" textAnchor="end">DISCOUNT</text>
+      <text x={bx - 6} y={bT + bH * 0.85} fontSize={8} fill="rgba(38,201,168,.45)" textAnchor="end">Buy zone</text>
+      <text x={bx - 6} y={bB} fontSize={9} fill="rgba(38,201,168,.9)" textAnchor="end" fontWeight={700}>0%</text>
+      <line x1={bx} y1={eq} x2={bx + bW + 140} y2={eq} stroke="rgba(255,255,255,.3)" strokeWidth={1} strokeDasharray="4 3" />
+      <line x1={bx} y1={g618} x2={bx + bW + 140} y2={g618} stroke="rgba(232,160,32,.45)" strokeWidth={1} strokeDasharray="3 3" />
+      <text x={bx + bW + 6} y={eq + 4} fontSize={8} fill="rgba(255,255,255,.55)">Equilibrium</text>
+      <text x={bx + bW + 6} y={g618 + 4} fontSize={8} fill="rgba(232,160,32,.8)" fontWeight={700}>Golden Zone</text>
+      <text x={bx + bW / 2} y={bT - 6} fontSize={9} fill="rgba(255,255,255,.65)" textAnchor="middle">Swing High</text>
+      <text x={bx + bW / 2} y={bB + 14} fontSize={9} fill="rgba(255,255,255,.65)" textAnchor="middle">Swing Low</text>
+      <text x={260} y={20} fontSize={9} fill="rgba(255,255,255,.55)" textAnchor="middle" fontWeight={700}>ENTRY LOGIC</text>
+      <rect x={210} y={eq + 18} width={100} height={22} rx={4} fill="rgba(38,201,168,.12)" stroke="rgba(38,201,168,.35)" strokeWidth={1} />
+      <text x={260} y={eq + 33} fontSize={10} fill="#26C9A8" textAnchor="middle" fontWeight={700}>BUY — Discount</text>
+      <rect x={210} y={eq - 42} width={100} height={22} rx={4} fill="rgba(240,96,122,.12)" stroke="rgba(240,96,122,.35)" strokeWidth={1} />
+      <text x={260} y={eq - 27} fontSize={10} fill="#F0607A" textAnchor="middle" fontWeight={700}>SELL — Premium</text>
+      <rect x={210} y={g618 + 2} width={100} height={18} rx={4} fill="rgba(232,160,32,.15)" stroke="rgba(232,160,32,.4)" strokeWidth={1} />
+      <text x={260} y={g618 + 14} fontSize={9} fill="#E8A020" textAnchor="middle" fontWeight={700}>Best OB entries</text>
+    </svg>
+  )
+}
+
+/* ── SMC Section components ──────────────────────────────────────────────── */
+
+function SectionSmcStruct() {
+  return (
+    <G2
+      caption="Bullish structure — each swing low (HL) is higher than the last, each swing high (HH) is higher than the last"
+      left={
+        <>
+          <p className="edu-p">Market structure is the foundation of SMC analysis. Price never moves randomly — it forms a sequence of swing highs and swing lows that reveal the underlying institutional trend.</p>
+          <div className="edu-table-wrap">
+            <table className="edu-table">
+              <thead><tr><th>Label</th><th>Meaning</th><th>Context</th></tr></thead>
+              <tbody>
+                <tr><td style={{ color: '#86EFAC', fontWeight: 700 }}>HH</td><td>Higher High</td><td>Peak above prior peak → bullish</td></tr>
+                <tr><td style={{ color: '#26C9A8', fontWeight: 700 }}>HL</td><td>Higher Low</td><td>Trough above prior trough → bullish</td></tr>
+                <tr><td style={{ color: '#FCA5A5', fontWeight: 700 }}>LH</td><td>Lower High</td><td>Peak below prior peak → bearish</td></tr>
+                <tr><td style={{ color: '#F0607A', fontWeight: 700 }}>LL</td><td>Lower Low</td><td>Trough below prior trough → bearish</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <ICard title="Reading Swing Points" color="teal">
+            <p>A swing high needs at least one lower candle on each side. A swing low needs at least one higher candle on each side. NubraOSS uses a 5-candle lookback by default — tunable per timeframe.</p>
+          </ICard>
+          <ICard title="In NubraOSS SMC Dashboard">
+            <div className="edu-kv">
+              <span className="edu-kv-k">BULLISH</span><span>Confirmed HH + HL sequence</span>
+              <span className="edu-kv-k">BEARISH</span><span>Confirmed LH + LL sequence</span>
+              <span className="edu-kv-k">RANGING</span><span>Mixed — no clear directional sequence</span>
+            </div>
+          </ICard>
+        </>
+      }
+      right={<DiagramSMCStructure />}
+    />
+  )
+}
+
+function SectionSmcOB() {
+  return (
+    <G2
+      caption="OB↑ = last bearish candle before bullish impulse. OB↓ = last bullish candle before bearish impulse."
+      left={
+        <>
+          <p className="edu-p">An Order Block is the last opposing candle before a strong impulse move. It marks where institutional orders were placed — and price tends to return to that zone for a retest before continuing.</p>
+          <TagRow items={[
+            { label: 'OB↑ — last red candle before big green', color: 'green' },
+            { label: 'OB↓ — last green candle before big red',  color: 'red' },
+          ]} />
+          <ICard title="Why Order Blocks Work" color="teal">
+            <p>Institutions can't fill an entire position in one candle. Remaining unfilled orders sit in the OB zone. When price returns, those orders execute — creating a predictable bounce or rejection.</p>
+          </ICard>
+          <ICard title="OB Zone Boundaries">
+            <div className="edu-kv">
+              <span className="edu-kv-k">High</span><span>Top of the OB candle body (or wick)</span>
+              <span className="edu-kv-k">Low</span><span>Bottom of the OB candle body (or wick)</span>
+              <span className="edu-kv-k">50% body mid</span><span>Highest-probability retest entry point</span>
+            </div>
+          </ICard>
+          <ICard title="Mitigation" color="amber">
+            <p>Once price retests the OB and continues in the impulse direction, the OB is "mitigated" — it loses effectiveness and should not be traded again as a primary signal.</p>
+          </ICard>
+        </>
+      }
+      right={<DiagramOrderBlocks />}
+    />
+  )
+}
+
+function SectionSmcFVG() {
+  return (
+    <G2
+      caption="Bullish FVG: C1.high < C3.low — no two-way auction occurred in that price range during the impulse candle"
+      left={
+        <>
+          <p className="edu-p">A Fair Value Gap (FVG) is a 3-candle imbalance where price moves so fast that a gap remains — no two-way auction happened in that range. Markets seek to fill this inefficiency.</p>
+          <Fml>{'Bullish FVG: C1.high < C3.low  (gap above)'}</Fml>
+          <Fml>{'Bearish FVG: C1.low > C3.high  (gap below)'}</Fml>
+          <ICard title="Why FVGs Fill" color="teal">
+            <p>Markets seek price efficiency. A one-sided auction (no counter-party) eventually attracts opposing orders. Price is drawn back to the FVG zone before continuing the trend — making it a high-probability entry area.</p>
+          </ICard>
+          <ICard title="FVG Entry Tiers">
+            <div className="edu-kv">
+              <span className="edu-kv-k">50% of FVG</span><span>Equilibrium of the gap — best entry</span>
+              <span className="edu-kv-k">Full gap entry</span><span>Any price inside the FVG zone is valid</span>
+              <span className="edu-kv-k">Unfilled FVG</span><span>Still active — acts as a price magnet</span>
+              <span className="edu-kv-k">Filled FVG</span><span>Fully covered — zone is neutralized</span>
+            </div>
+          </ICard>
+          <ICard title="In NubraOSS Dashboard" color="amber">
+            <p>Active FVGs shown as FVG↑ / FVG↓ on the right price axis with dotted lines. The top 6 most recent zones are displayed per timeframe.</p>
+          </ICard>
+        </>
+      }
+      right={<DiagramFVG />}
+    />
+  )
+}
+
+function SectionSmcBOS() {
+  return (
+    <G2
+      caption="CHoCH: price breaks a swing point against the trend (early reversal). BOS: price breaks with the trend (continuation)."
+      left={
+        <>
+          <p className="edu-p">BOS and CHoCH are the primary signals in SMC — they tell you whether price is confirming the current trend or warning of a reversal. Every significant market move begins with a CHoCH.</p>
+          <div className="edu-table-wrap">
+            <table className="edu-table">
+              <thead><tr><th>Signal</th><th>What breaks</th><th>Implication</th></tr></thead>
+              <tbody>
+                <tr><td style={{ color: '#26C9A8', fontWeight: 700 }}>BOS ↑</td><td>Previous swing high</td><td>Uptrend confirmed — look for long entries on pullback</td></tr>
+                <tr><td style={{ color: '#F0607A', fontWeight: 700 }}>BOS ↓</td><td>Previous swing low</td><td>Downtrend confirmed — look for short entries on bounce</td></tr>
+                <tr><td style={{ color: '#A78BFA', fontWeight: 700 }}>CHoCH ↑</td><td>Swing high in downtrend</td><td>Possible bullish reversal — wait for confirmation</td></tr>
+                <tr><td style={{ color: '#A78BFA', fontWeight: 700 }}>CHoCH ↓</td><td>Swing low in uptrend</td><td>Possible bearish reversal — wait for confirmation</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <ICard title="Entry Sequence" color="amber">
+            <p>CHoCH alone is not enough. Wait for: <strong>CHoCH → pullback forms HL → first BOS in new direction</strong>. This three-step confirmation gives the highest-probability entry with the new institutional trend.</p>
+          </ICard>
+          <ICard title="In NubraOSS Dashboard" color="teal">
+            <p>BOS / CHoCH levels appear as dashed lines on the right axis. The Structure Trend badge (BULLISH / BEARISH / RANGING) and Confluence Score update in real-time as new signals form.</p>
+          </ICard>
+        </>
+      }
+      right={<DiagramBOSChoCH />}
+    />
+  )
+}
+
+function SectionSmcLiq() {
+  return (
+    <G2
+      caption="BSL = stops above equal highs. SSL = stops below equal lows. Smart money sweeps before making the real move."
+      left={
+        <>
+          <p className="edu-p">Liquidity pools are clusters of stop-loss orders at obvious price levels. Smart money (institutions) deliberately hunt these pools before executing their real position — sweeping stops to fill their orders at better prices.</p>
+          <TagRow items={[
+            { label: 'BSL — Buy Side: stops above equal highs', color: 'amber' },
+            { label: 'SSL — Sell Side: stops below equal lows',  color: 'teal' },
+          ]} />
+          <ICard title="Where Liquidity Pools Form">
+            <div className="edu-kv">
+              <span className="edu-kv-k">Equal highs</span><span>Multiple wicks at the same level → BSL above</span>
+              <span className="edu-kv-k">Equal lows</span><span>Multiple wicks at the same level → SSL below</span>
+              <span className="edu-kv-k">Previous HH / LL</span><span>Retail stops cluster at obvious swing points</span>
+              <span className="edu-kv-k">Round numbers</span><span>24000, 24500 — natural stop magnets</span>
+            </div>
+          </ICard>
+          <ICard title="The Sweep Signal" color="amber">
+            <p>A sweep = wick above/below the liquidity pool with close back inside the range. This signature — institutions absorbing stops and reversing — combined with an OB or FVG in the sweep zone is a very high-probability setup.</p>
+          </ICard>
+          <ICard title="In NubraOSS Dashboard" color="teal">
+            <p>BSL appears as amber dashed lines above current price. SSL appears as blue dashed lines below. Scanner signals fire when a sweep occurs: liquidity taken + reversal candle within the same bar.</p>
+          </ICard>
+        </>
+      }
+      right={<DiagramLiquidity />}
+    />
+  )
+}
+
+function SectionSmcPD() {
+  return (
+    <G2
+      caption="Premium (above 50%) = expensive — prefer shorts. Discount (below 50%) = cheap — prefer longs. Golden Zone at 61.8% is best for OB entries."
+      left={
+        <>
+          <p className="edu-p">Every price swing creates a range. Premium/Discount divides this range at the 50% equilibrium to identify where it is cheap to buy (discount) and expensive to sell (premium).</p>
+          <Fml>{'Equilibrium = (Swing High + Swing Low) / 2'}</Fml>
+          <div className="edu-table-wrap">
+            <table className="edu-table">
+              <thead><tr><th>Zone</th><th>Range</th><th>Bias</th></tr></thead>
+              <tbody>
+                <tr><td style={{ color: '#F0607A', fontWeight: 700 }}>Premium</td><td>50 – 100%</td><td>Look for short setups, avoid longs</td></tr>
+                <tr><td style={{ color: '#E8A020', fontWeight: 700 }}>Golden Zone</td><td>61.8 – 78.6%</td><td>Best OB + FVG confluence entries</td></tr>
+                <tr><td style={{ color: '#8A96B8', fontWeight: 700 }}>Equilibrium</td><td>50%</td><td>Neutral — wait for directional signal</td></tr>
+                <tr><td style={{ color: '#26C9A8', fontWeight: 700 }}>Discount</td><td>0 – 50%</td><td>Look for long setups, avoid shorts</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <ICard title="Combining with OBs and FVGs" color="teal">
+            <p>The highest-probability setups form when a bullish OB or FVG sits inside the Discount zone. Similarly, bearish OBs in the Premium zone. This Price/Zone alignment is the core SMC entry model.</p>
+          </ICard>
+          <ICard title="The Golden Zone" color="amber">
+            <p>The 61.8%–78.6% retracement of a swing (Fibonacci) is where institutional OBs concentrate most often. This is the signature SMC entry zone — maximum reward-to-risk with structural backing.</p>
+          </ICard>
+        </>
+      }
+      right={<DiagramPremiumDiscount />}
+    />
+  )
+}
+
+function SmcSectionContent({ id }: { id: string }) {
+  switch (id) {
+    case 'smc-struct': return <SectionSmcStruct />
+    case 'smc-ob':     return <SectionSmcOB />
+    case 'smc-fvg':    return <SectionSmcFVG />
+    case 'smc-bos':    return <SectionSmcBOS />
+    case 'smc-liq':    return <SectionSmcLiq />
+    case 'smc-pd':     return <SectionSmcPD />
+    default:           return null
+  }
+}
+
+/* ── SmcAcademy ──────────────────────────────────────────────────────────── */
+function SmcAcademy({ onBack, onClose }: { onBack: () => void; onClose: () => void }) {
+  const [idx, setIdx] = useState(0)
+  const section = SMC_SECTIONS[idx]
   return (
     <div className="edu-root">
-      {/* Header */}
+      <div className="edu-header">
+        <div className="edu-header-left">
+          <span className="edu-header-title">Academy</span>
+          <span className="edu-header-sep">/</span>
+          <span className="edu-header-sub">Smart Money Concepts</span>
+        </div>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button className="edu-back-btn" onClick={onBack}>← All Modules</button>
+          <button className="edu-close" onClick={onClose}>Close</button>
+        </div>
+      </div>
+      <div className="edu-layout">
+        <nav className="edu-sidebar">
+          {SMC_SECTIONS.map((s, i) => (
+            <button key={s.id} className={`edu-nav-item${i === idx ? ' active' : ''}`} onClick={() => setIdx(i)}>
+              <span className="edu-nav-num">{i + 1}</span>
+              <span>{s.title}</span>
+            </button>
+          ))}
+        </nav>
+        <main className="edu-main">
+          <div className="edu-section-header">
+            <div className="edu-section-pre">{String(idx + 1).padStart(2, '0')} of {SMC_SECTIONS.length}</div>
+            <h2 className="edu-section-title">{section.title}</h2>
+            <div className="edu-section-sub">{section.sub}</div>
+          </div>
+          <SmcSectionContent id={section.id} />
+        </main>
+      </div>
+      <div className="edu-footer">
+        <button className="btn-ghost" disabled={idx === 0} onClick={() => setIdx(i => Math.max(0, i - 1))}>Previous</button>
+        <div className="edu-footer-dots">
+          {SMC_SECTIONS.map((_, i) => (
+            <span key={i} className={`edu-dot${i === idx ? ' active' : ''}`} onClick={() => setIdx(i)} />
+          ))}
+        </div>
+        {idx < SMC_SECTIONS.length - 1
+          ? <button className="btn-primary" onClick={() => setIdx(i => i + 1)}>Next</button>
+          : <button className="btn-primary" onClick={onClose}>Enter Dashboard</button>}
+      </div>
+    </div>
+  )
+}
+
+/* ── GreeksContent ───────────────────────────────────────────────────────── */
+function GreeksContent({ onBack, onClose }: { onBack: () => void; onClose: () => void }) {
+  const [idx, setIdx] = useState(0)
+  const section = SECTIONS[idx]
+  return (
+    <div className="edu-root">
       <div className="edu-header">
         <div className="edu-header-left">
           <span className="edu-header-title">Academy</span>
           <span className="edu-header-sep">/</span>
           <span className="edu-header-sub">Options Intelligence Guide</span>
         </div>
-        <button className="edu-close" onClick={onClose}>Close</button>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button className="edu-back-btn" onClick={onBack}>← All Modules</button>
+          <button className="edu-close" onClick={onClose}>Close</button>
+        </div>
       </div>
-
       <div className="edu-layout">
-        {/* Sidebar */}
         <nav className="edu-sidebar">
           {SECTIONS.map((s, i) => (
-            <button
-              key={s.id}
-              className={`edu-nav-item${i === idx ? ' active' : ''}`}
-              onClick={() => setIdx(i)}
-            >
+            <button key={s.id} className={`edu-nav-item${i === idx ? ' active' : ''}`} onClick={() => setIdx(i)}>
               <span className="edu-nav-num">{i + 1}</span>
               <span>{s.title}</span>
             </button>
           ))}
         </nav>
-
-        {/* Main */}
         <main className="edu-main">
           <div className="edu-section-header">
             <div className="edu-section-pre">{String(idx + 1).padStart(2, '0')} of {SECTIONS.length}</div>
@@ -942,23 +1419,74 @@ export default function EducationPage({ onClose }: { onClose: () => void }) {
           <SectionContent id={section.id} />
         </main>
       </div>
-
-      {/* Footer */}
       <div className="edu-footer">
-        <button className="btn-ghost" disabled={idx === 0} onClick={() => setIdx(i => Math.max(0, i - 1))}>
-          Previous
-        </button>
+        <button className="btn-ghost" disabled={idx === 0} onClick={() => setIdx(i => Math.max(0, i - 1))}>Previous</button>
         <div className="edu-footer-dots">
           {SECTIONS.map((_, i) => (
             <span key={i} className={`edu-dot${i === idx ? ' active' : ''}`} onClick={() => setIdx(i)} />
           ))}
         </div>
-        {idx < SECTIONS.length - 1 ? (
-          <button className="btn-primary" onClick={() => setIdx(i => i + 1)}>Next</button>
-        ) : (
-          <button className="btn-primary" onClick={onClose}>Enter Dashboard</button>
-        )}
+        {idx < SECTIONS.length - 1
+          ? <button className="btn-primary" onClick={() => setIdx(i => i + 1)}>Next</button>
+          : <button className="btn-primary" onClick={onClose}>Enter Dashboard</button>}
       </div>
     </div>
   )
+}
+
+/* ── AcademyLanding ──────────────────────────────────────────────────────── */
+function AcademyLanding({ onSelect, onClose }: {
+  onSelect: (v: 'greeks' | 'smc') => void
+  onClose: () => void
+}) {
+  return (
+    <div className="edu-root">
+      <div className="edu-header">
+        <div className="edu-header-left">
+          <span className="edu-header-title">Academy</span>
+          <span className="edu-header-sep">/</span>
+          <span className="edu-header-sub">Choose a module to begin</span>
+        </div>
+        <button className="edu-close" onClick={onClose}>Close</button>
+      </div>
+      <div className="edu-landing">
+        <div style={{ textAlign: 'center' }}>
+          <div className="edu-landing-title">NubraOSS Academy</div>
+          <div className="edu-landing-sub">Interactive guides for options and smart money trading</div>
+        </div>
+        <div className="edu-module-grid">
+          <button className="edu-module-tile edu-module-tile-greeks" onClick={() => onSelect('greeks')}>
+            <div className="edu-module-icon">📊</div>
+            <div className="edu-module-name">Options &amp; Greeks</div>
+            <div className="edu-module-desc">Understand options payoffs, OI dynamics, implied volatility, and all five Greeks — plus GEX, key levels, and the signal pipeline.</div>
+            <div className="edu-module-topics">
+              {['CE/PE Basics', 'Open Interest', 'PCR', 'IV & Crush', 'Δ Γ θ ν', 'GEX', 'Key Levels', 'Signals'].map(t => (
+                <span key={t} className="edu-module-topic">{t}</span>
+              ))}
+            </div>
+            <div className="edu-module-cta">Explore module →</div>
+          </button>
+          <button className="edu-module-tile edu-module-tile-smc" onClick={() => onSelect('smc')}>
+            <div className="edu-module-icon">🏦</div>
+            <div className="edu-module-name">Smart Money Concepts</div>
+            <div className="edu-module-desc">Learn how institutions move markets — from structure and order blocks to liquidity sweeps and premium/discount zones with live visualizers.</div>
+            <div className="edu-module-topics">
+              {['Market Structure', 'Order Blocks', 'FVG', 'BOS & CHoCH', 'Liquidity', 'Premium/Discount'].map(t => (
+                <span key={t} className="edu-module-topic">{t}</span>
+              ))}
+            </div>
+            <div className="edu-module-cta">Explore module →</div>
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/* ── Main Component ──────────────────────────────────────────────────────── */
+export default function EducationPage({ onClose }: { onClose: () => void }) {
+  const [view, setView] = useState<'landing' | 'greeks' | 'smc'>('landing')
+  if (view === 'greeks') return <GreeksContent onBack={() => setView('landing')} onClose={onClose} />
+  if (view === 'smc')    return <SmcAcademy   onBack={() => setView('landing')} onClose={onClose} />
+  return <AcademyLanding onSelect={setView} onClose={onClose} />
 }

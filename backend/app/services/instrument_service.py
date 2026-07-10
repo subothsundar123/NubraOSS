@@ -47,6 +47,8 @@ class InstrumentService:
             "Content-Type": "application/json",
             "Accept": "application/json",
             "x-device-id": device_id,
+            "x-app-version": "0.4.5",
+            "Cookie": f"deviceId={device_id}",
         }
 
     def _fetch_exchange_refdata(

@@ -87,6 +87,8 @@ class MarketHistoryService:
                 "Content-Type": "application/json",
                 "Accept": "application/json",
                 "x-device-id": request.device_id,
+                "x-app-version": "0.4.5",
+                "Cookie": f"deviceId={request.device_id}",
             },
         )
         if response.status_code >= 400:
